@@ -52,10 +52,10 @@
                             <label class="block text-sm font-medium text-gray-700">Year</label>
                             <input v-model="newListing.Year" type="number" class="mt-1 w-full p-2 border rounded" required>
                         </div>
-                        <div class="mt-4">
+                        <div>
                             <label class="block text-sm font-medium text-gray-700">Make</label>
                             <select v-model="newListing.Make" class="mt-1 w-full p-2 border rounded bg-white text-gray-900" required>
-                              <option value="">Select Make</option>
+                              <option value="" disabled>Select Make</option>
                               <option value="Acura">Acura</option>
                               <option value="Alfa Romeo">Alfa Romeo</option>
                               <option value="Aston Martin">Aston Martin</option>
@@ -117,7 +117,7 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Body Style</label>
                             <select v-model="newListing['Body Style']" class="mt-1 w-full p-2 border rounded" required>
-                                <option value="">Select Body Style</option>
+                                <option value="" disabled>Select Body Style</option>
                                 <option value="Sedan">Sedan</option>
                                 <option value="SUV">SUV</option>
                                 <option value="Coupe">Coupe</option>
@@ -135,7 +135,7 @@
                         <div>
                           <label class="block text-sm font-medium text-gray-700">Exterior Color</label>
                           <select v-model="newListing['Exterior Color']" class="mt-1 w-full p-2 border rounded bg-white text-gray-900" required>
-                            <option value="">Select Exterior Color</option>
+                            <option value="" disabled>Select Exterior Color</option>
                             <option value="Black">Black</option>
                             <option value="Blue">Blue</option>
                             <option value="Brown">Brown</option>
@@ -160,7 +160,7 @@
                         <div>
                           <label class="block text-sm font-medium text-gray-700">Interior Color</label>
                           <select v-model="newListing['Interior Color']" class="mt-1 w-full p-2 border rounded bg-white text-gray-900" required>
-                            <option value="">Select Interior Color</option>
+                            <option value="" disabled>Select Interior Color</option>
                             <option value="Black">Black</option>
                             <option value="Blue">Blue</option>
                             <option value="Brown">Brown</option>
@@ -187,7 +187,7 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Vehicle Condition</label>
                             <select v-model="newListing['Vehicle Condition']" class="mt-1 w-full p-2 border rounded" required>
-                                <option value="">Select Condition</option>
+                                <option value="" disabled>Select Condition</option>
                                 <option value="Excellent">Excellent</option>
                                 <option value="Very good">Very good</option>
                                 <option value="Good">Good</option>
@@ -198,7 +198,7 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Fuel Type</label>
                             <select v-model="newListing['Fuel Type']" class="mt-1 w-full p-2 border rounded" required>
-                                <option value="">Select Fuel Type</option>
+                                <option value="" disabled>Select Fuel Type</option>
                                 <option value="Diesel">Diesel</option>
                                 <option value="Electric">Electric</option>
                                 <option value="Gasoline">Gasoline</option>
@@ -215,7 +215,7 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Transmission</label>
                             <select v-model="newListing.Transmission" class="mt-1 w-full p-2 border rounded" required>
-                                <option value="">Select Transmission</option>
+                                <option value="" disabled>Select Transmission</option>
                                 <option value="Manual transmission">Manual transmission</option>
                                 <option value="Automatic transmission">Automatic transmission</option>
                             </select>
