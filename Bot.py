@@ -1,3 +1,4 @@
+# Import statements remain the same
 import os
 import time
 import pandas as pd
@@ -12,6 +13,7 @@ from selenium.common.exceptions import TimeoutException
 import pyperclip
 import pyautogui
 
+# Keep all existing functions unchanged
 def get_file_data(file_name):
     with open(file_name, 'r', encoding='utf-8') as file:
         data = file.read().strip().split('\n')

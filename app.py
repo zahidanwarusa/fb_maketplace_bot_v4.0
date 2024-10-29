@@ -53,12 +53,16 @@ def index():
     try:
         df = pd.read_csv('listings.csv')
         listings = df.to_dict('records')
+        # Add selectedDay field to each listing if it doesn't exist
+        for listing in listings:
+            if 'selectedDay' not in listing:
+                listing['selectedDay'] = ''
     except FileNotFoundError:
         listings = []
     return render_template('index.html', 
-                           profiles=profiles, 
-                           listings=listings, 
-                           profile_locations=profile_locations)
+                         profiles=profiles, 
+                         listings=listings, 
+                         profile_locations=profile_locations)
 
 @app.route('/update_profile_location', methods=['POST'])
 def update_profile_location():
@@ -88,34 +92,99 @@ def delete_listing():
 
 @app.route('/run_bot', methods=['POST'])
 def run_bot():
-    selected_profiles = request.json['profiles']
-    selected_listings = request.json['listings']
+    data = request.json
+    selected_profiles = data['profiles']
+    selected_listings = data['listings']
+    listings_data = data.get('listingsData', [])
     profile_locations = load_profile_locations()
     
-    # Save selected profiles to a temporary file with their locations
-    with open('selected_profiles.txt', 'w') as f:
-        for profile in selected_profiles:
-            location = profile_locations.get(profile['folder_name'], "Default Location")
-            f.write(f"{profile['path']}|{location}|{profile['user_name']}\n")
+    try:
+        # Save selected profiles to a temporary file with their locations
+        with open('selected_profiles.txt', 'w') as f:
+            for profile in selected_profiles:
+                location = profile_locations.get(profile['folder_name'], "Default Location")
+                f.write(f"{profile['path']}|{location}|{profile['user_name']}\n")
+        
+        # Read original CSV and process selected listings
+        df = pd.read_csv('listings.csv')
+        
+        # Create a new DataFrame with only selected listings
+        selected_indices = selected_listings
+        selected_df = df.iloc[selected_indices].copy()
+        
+        # Update image paths with selected days from listingsData
+        for i, index in enumerate(selected_indices):
+            if i < len(listings_data):
+                listing_data = listings_data[i]
+                if 'selectedDay' in listing_data and listing_data['selectedDay']:
+                    original_path = selected_df.iloc[i]['Images Path']
+                    day_folder = listing_data['selectedDay']
+                    # Create the full path including the day folder
+                    new_path = os.path.join(original_path, day_folder)
+                    selected_df.iloc[i, selected_df.columns.get_loc('Images Path')] = new_path
+        
+        # Save to temporary CSV
+        selected_df.to_csv('selected_listings.csv', index=False)
+        
+        # Run the bot script
+        process = subprocess.Popen(['python', 'bot.py'], 
+                                 stdout=subprocess.PIPE, 
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True)
+        
+        stdout, stderr = process.communicate()
+        
+        # Clean up temporary files
+        try:
+            os.remove('selected_profiles.txt')
+            os.remove('selected_listings.csv')
+        except Exception as e:
+            print(f"Error cleaning up temporary files: {e}")
+        
+        return jsonify({
+            'stdout': stdout,
+            'stderr': stderr,
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        # Log the error and return it
+        error_message = f"Error in run_bot: {str(e)}"
+        print(error_message)
+        return jsonify({
+            'status': 'error',
+            'message': error_message
+        }), 500
+
+# Create required files if they don't exist
+def initialize_files():
+    # Create listings.csv if it doesn't exist
+    if not os.path.exists('listings.csv'):
+        default_columns = [
+            'Year', 'Make', 'Model', 'Mileage', 'Price', 
+            'Body Style', 'Exterior Color', 'Interior Color',
+            'Vehicle Condition', 'Fuel Type', 'Transmission',
+            'Description', 'Images Path'
+        ]
+        df = pd.DataFrame(columns=default_columns)
+        df.to_csv('listings.csv', index=False)
     
-    # Save selected listings to a temporary CSV file
-    df = pd.read_csv('listings.csv')
-    selected_df = df.iloc[selected_listings]
-    selected_df.to_csv('selected_listings.csv', index=False)
-    
-    # Run the existing bot script
-    process = subprocess.Popen(['python', 'bot.py'], 
-                               stdout=subprocess.PIPE, 
-                               stderr=subprocess.PIPE,
-                               universal_newlines=True)
-    
-    stdout, stderr = process.communicate()
-    
-    # Clean up temporary files
-    os.remove('selected_profiles.txt')
-    os.remove('selected_listings.csv')
-    
-    return jsonify({'stdout': stdout, 'stderr': stderr})
+    # Create profile_locations.json if it doesn't exist
+    if not os.path.exists('profile_locations.json'):
+        with open('profile_locations.json', 'w') as f:
+            json.dump({}, f)
 
 if __name__ == '__main__':
+    initialize_files()  # Initialize required files
     app.run(debug=True)
+
+
+
+#     C:\Carz\[car-folder]\
+#    ├── Sunday\
+#    ├── Monday\
+#    ├── Tuesday\
+#    ├── Wednesday\
+#    ├── Thursday\
+#    ├── Friday\
+#    └── Saturday\
