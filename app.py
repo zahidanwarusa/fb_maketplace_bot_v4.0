@@ -10,6 +10,7 @@ app = Flask(__name__)
 def get_chrome_profiles():
     user_data_dir = os.path.expandvars(r'%LOCALAPPDATA%\Google\Chrome\User Data')
     profiles = []
+    profile_locations = load_profile_locations()
     
     # Read the Local State file to get profile names
     try:
@@ -27,10 +28,15 @@ def get_chrome_profiles():
         folder_name = os.path.basename(profile_dir)
         profile_id = folder_name if folder_name != 'Default' else 'Default'
         user_name = profile_info.get(profile_id, {}).get('name', 'Unknown')
+        
+        # Get location for this profile from profile_locations.json
+        location = profile_locations.get(folder_name, '')
+        
         profiles.append({
             'folder_name': folder_name,
             'user_name': user_name,
-            'path': profile_dir
+            'path': profile_dir,
+            'location': location  # Add location to profile data
         })
 
     return profiles
@@ -102,7 +108,8 @@ def run_bot():
         # Save selected profiles to a temporary file with their locations
         with open('selected_profiles.txt', 'w') as f:
             for profile in selected_profiles:
-                location = profile_locations.get(profile['folder_name'], "Default Location")
+                # Use the location from the profile data structure
+                location = profile.get('location', profile_locations.get(profile['folder_name'], "Default Location"))
                 f.write(f"{profile['path']}|{location}|{profile['user_name']}\n")
         
         # Read original CSV and process selected listings
@@ -148,7 +155,6 @@ def run_bot():
         })
         
     except Exception as e:
-        # Log the error and return it
         error_message = f"Error in run_bot: {str(e)}"
         print(error_message)
         return jsonify({
@@ -177,14 +183,3 @@ def initialize_files():
 if __name__ == '__main__':
     initialize_files()  # Initialize required files
     app.run(debug=True)
-
-
-
-#     C:\Carz\[car-folder]\
-#    ├── Sunday\
-#    ├── Monday\
-#    ├── Tuesday\
-#    ├── Wednesday\
-#    ├── Thursday\
-#    ├── Friday\
-#    └── Saturday\
