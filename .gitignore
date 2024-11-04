@@ -1,0 +1,66 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Application specific files
+listings.csv
+profile_locations.json
+selected_profiles.txt
+selected_listings.csv
+error_screenshot_*.png
+
+# Chrome profile data
+Chrome User Data/
+
+# Local development settings
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+error_logs/
+
+# Temporary files
+temp/
+tmp/
+
+# Debug files
+debug/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Bot specific directories
+chromedriver*/
+screenshots/
+downloads/
+uploads/
+images/
+profiles/
+
+# Database files
+*.db
+*.sqlite3
+
+# Test files
+test_listings.csv
+test_profiles.json
+test_*.json
+test_*.csv
