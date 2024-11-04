@@ -57,14 +57,36 @@ def index():
     profiles = get_chrome_profiles()
     profile_locations = load_profile_locations()
     try:
-        df = pd.read_csv('listings.csv')
-        listings = df.to_dict('records')
-        # Add selectedDay field to each listing if it doesn't exist
+        # Read CSV with error handling
+        df = pd.read_csv('listings.csv', encoding='utf-8')
+        
+        # Ensure all required columns exist
+        required_columns = [
+            'Year', 'Make', 'Model', 'Mileage', 'Price', 
+            'Body Style', 'Exterior Color', 'Interior Color',
+            'Vehicle Condition', 'Fuel Type', 'Transmission',
+            'Description', 'Images Path'
+        ]
+        
+        # Add any missing columns with empty values
+        for col in required_columns:
+            if col not in df.columns:
+                df[col] = ''
+        
+        # Convert to records
+        listings = df[required_columns].to_dict('records')
+        
+        # Initialize selectedDay if needed
         for listing in listings:
             if 'selectedDay' not in listing:
                 listing['selectedDay'] = ''
+                
     except FileNotFoundError:
         listings = []
+    except Exception as e:
+        print(f"Error reading listings.csv: {str(e)}")
+        listings = []
+        
     return render_template('index.html', 
                          profiles=profiles, 
                          listings=listings, 
@@ -72,48 +94,128 @@ def index():
 
 @app.route('/update_profile_location', methods=['POST'])
 def update_profile_location():
-    data = request.json
-    profile_locations = load_profile_locations()
-    profile_locations[data['profile']] = data['location']
-    save_profile_locations(profile_locations)
-    return jsonify({"status": "success"})
+    try:
+        data = request.json
+        if not data or 'profile' not in data or 'location' not in data:
+            return jsonify({"status": "error", "message": "Invalid data"}), 400
+            
+        profile_locations = load_profile_locations()
+        profile_locations[data['profile']] = data['location']
+        save_profile_locations(profile_locations)
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/add_listing', methods=['POST'])
 def add_listing():
-    listing = request.json
-    df = pd.DataFrame([listing])
-    df.to_csv('listings.csv', mode='a', header=not os.path.exists('listings.csv'), index=False)
-    return jsonify({"status": "success"})
+    try:
+        listing = request.json
+        # Ensure the listing has all required fields
+        required_fields = [
+            'Year', 'Make', 'Model', 'Mileage', 'Price', 
+            'Body Style', 'Exterior Color', 'Interior Color',
+            'Vehicle Condition', 'Fuel Type', 'Transmission',
+            'Description', 'Images Path'
+        ]
+        
+        # Validate required fields
+        missing_fields = [field for field in required_fields if not listing.get(field)]
+        if missing_fields:
+            return jsonify({
+                "status": "error",
+                "message": f"Missing required fields: {', '.join(missing_fields)}"
+            }), 400
+        
+        # Create a clean listing dictionary with only the required fields
+        clean_listing = {field: str(listing.get(field, '')) for field in required_fields}
+        
+        # Convert numeric fields
+        try:
+            clean_listing['Year'] = int(float(clean_listing['Year']))
+            clean_listing['Mileage'] = int(float(clean_listing['Mileage']))
+            clean_listing['Price'] = int(float(clean_listing['Price']))
+        except ValueError as e:
+            return jsonify({
+                "status": "error",
+                "message": f"Invalid numeric value: {str(e)}"
+            }), 400
+        
+        # Convert to DataFrame
+        df_new = pd.DataFrame([clean_listing])
+        
+        # If file exists, append; otherwise create new
+        if os.path.exists('listings.csv'):
+            try:
+                df_existing = pd.read_csv('listings.csv', encoding='utf-8')
+                df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+            except Exception as e:
+                return jsonify({
+                    "status": "error",
+                    "message": f"Error reading existing listings: {str(e)}"
+                }), 500
+        else:
+            df_combined = df_new
+            
+        # Save to CSV with proper encoding
+        try:
+            df_combined.to_csv('listings.csv', index=False, encoding='utf-8')
+            return jsonify({"status": "success"})
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": f"Error saving listings: {str(e)}"
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Unexpected error: {str(e)}"
+        }), 500
 
 @app.route('/delete_listing', methods=['POST'])
 def delete_listing():
-    index = request.json['index']
     try:
-        df = pd.read_csv('listings.csv')
+        index = request.json.get('index')
+        if index is None:
+            return jsonify({"status": "error", "message": "No index provided"}), 400
+            
+        df = pd.read_csv('listings.csv', encoding='utf-8')
+        if index >= len(df):
+            return jsonify({"status": "error", "message": "Invalid index"}), 400
+            
         df = df.drop(index)
-        df.to_csv('listings.csv', index=False)
+        df.to_csv('listings.csv', index=False, encoding='utf-8')
         return jsonify({"status": "success"})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)})
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/run_bot', methods=['POST'])
 def run_bot():
     data = request.json
-    selected_profiles = data['profiles']
-    selected_listings = data['listings']
-    listings_data = data.get('listingsData', [])
-    profile_locations = load_profile_locations()
-    
+    if not data:
+        return jsonify({"status": "error", "message": "No data provided"}), 400
+        
     try:
+        selected_profiles = data.get('profiles', [])
+        selected_listings = data.get('listings', [])
+        listings_data = data.get('listingsData', [])
+        
+        if not selected_profiles or not selected_listings:
+            return jsonify({
+                "status": "error",
+                "message": "No profiles or listings selected"
+            }), 400
+        
+        profile_locations = load_profile_locations()
+        
         # Save selected profiles to a temporary file with their locations
-        with open('selected_profiles.txt', 'w') as f:
+        with open('selected_profiles.txt', 'w', encoding='utf-8') as f:
             for profile in selected_profiles:
-                # Use the location from the profile data structure
                 location = profile.get('location', profile_locations.get(profile['folder_name'], "Default Location"))
                 f.write(f"{profile['path']}|{location}|{profile['user_name']}\n")
         
         # Read original CSV and process selected listings
-        df = pd.read_csv('listings.csv')
+        df = pd.read_csv('listings.csv', encoding='utf-8')
         
         # Create a new DataFrame with only selected listings
         selected_indices = selected_listings
@@ -131,13 +233,15 @@ def run_bot():
                     selected_df.iloc[i, selected_df.columns.get_loc('Images Path')] = new_path
         
         # Save to temporary CSV
-        selected_df.to_csv('selected_listings.csv', index=False)
+        selected_df.to_csv('selected_listings.csv', index=False, encoding='utf-8')
         
         # Run the bot script
-        process = subprocess.Popen(['python', 'bot.py'], 
-                                 stdout=subprocess.PIPE, 
-                                 stderr=subprocess.PIPE,
-                                 universal_newlines=True)
+        process = subprocess.Popen(
+            ['python', 'bot.py'], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            universal_newlines=True
+        )
         
         stdout, stderr = process.communicate()
         
@@ -162,7 +266,6 @@ def run_bot():
             'message': error_message
         }), 500
 
-# Create required files if they don't exist
 def initialize_files():
     # Create listings.csv if it doesn't exist
     if not os.path.exists('listings.csv'):
@@ -170,10 +273,10 @@ def initialize_files():
             'Year', 'Make', 'Model', 'Mileage', 'Price', 
             'Body Style', 'Exterior Color', 'Interior Color',
             'Vehicle Condition', 'Fuel Type', 'Transmission',
-            'Description', 'Images Path'
+            'Description', 'Images Path', 'selectedDay'
         ]
         df = pd.DataFrame(columns=default_columns)
-        df.to_csv('listings.csv', index=False)
+        df.to_csv('listings.csv', index=False, encoding='utf-8')
     
     # Create profile_locations.json if it doesn't exist
     if not os.path.exists('profile_locations.json'):
