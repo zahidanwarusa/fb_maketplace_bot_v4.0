@@ -49,6 +49,63 @@ def specific_clicker2(driver, ele):
     except Exception as e:
         pass
 
+def generate_multiple_images_path(images_path):
+    """
+    Generate properly formatted string of image paths.
+    """
+    if not os.path.exists(images_path):
+        print(f"ERROR: Directory does not exist: {images_path}")
+        return None
+        
+    valid_files = []
+    for root, dirs, files in os.walk(images_path):
+        for file in files:
+            # Accept any image file including webp
+            if file.lower().endswith(('.jpg', '.jpeg', '.png', '.heif', '.heic', '.webp')):
+                file_path = os.path.join(root, file)
+                valid_files.append(os.path.abspath(file_path))
+    
+    if not valid_files:
+        print(f"ERROR: No valid images found in {images_path}")
+        return None
+        
+    print(f"Found {len(valid_files)} valid images:")
+    for file in valid_files:
+        print(f"  - {file}")
+        
+    return '\n'.join(valid_files)
+
+def input_file_add_files(driver, selector, files):
+    """
+    Add files to an input element without unnecessary checks.
+    """
+    if not files:
+        print("No valid files provided for upload")
+        return False
+        
+    try:
+        # Wait for input file element to be present
+        input_file = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+        )
+        print("Found file input element")
+    except Exception as e:
+        print(f'ERROR: Could not find file input element')
+        return False
+
+    time.sleep(2)
+
+    try:
+        print("Attempting to upload files...")
+        input_file.send_keys(files)
+        print("Files sent successfully")
+        time.sleep(3)  # Wait for upload to complete
+        return True
+        
+    except Exception as e:
+        print(f'ERROR: Failed to send files to input')
+        return False
+
 def close_chrome():
     import os
     try:
@@ -96,33 +153,61 @@ for single_profile in list_of_profiles:
             specific_clicker(driver, "//span[text()='Vehicle type']")
             specific_clicker(driver, f"//span[contains(text(), 'Car/')]")
 
-            # ADD IMAGES
-            images_path = single_row['Images Path']
-            # Click on Add Photos
-            try:
-                add_photos_button = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Add photos')]"))
-                )
-                add_photos_button.click()
-                time.sleep(2)  # Short wait for any animations or dialogs to appear
-                print("Clicked on 'Add Photos' button")
-            except Exception as e:
-                print(f"Failed to click 'Add Photos' button: {str(e)}")
+            # # ADD IMAGES
+            # images_path = single_row['Images Path']
+            # # Click on Add Photos
+            # try:
+            #     add_photos_button = WebDriverWait(driver, 10).until(
+            #         EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Add photos')]"))
+            #     )
+            #     add_photos_button.click()
+            #     time.sleep(2)  # Short wait for any animations or dialogs to appear
+            #     print("Clicked on 'Add Photos' button")
+            # except Exception as e:
+            #     print(f"Failed to click 'Add Photos' button: {str(e)}")
             
-            pyperclip.copy(images_path)
-            pyautogui.hotkey('ctrl', 'v')
-            pyautogui.press('enter')
-            time.sleep(3)
-            pyautogui.click(x=668, y=319)
-            pyautogui.hotkey('ctrl', 'a')
-            time.sleep(2)
-            pyautogui.press('enter')
-            time.sleep(1)
+            # pyperclip.copy(images_path)
+            # pyautogui.hotkey('ctrl', 'v')
+            # pyautogui.press('enter')
+            # time.sleep(3)
+            # pyautogui.click(x=668, y=319)
+            # pyautogui.hotkey('ctrl', 'a')
+            # time.sleep(2)
+            # pyautogui.press('enter')
+            # time.sleep(1)
 
-            files_list = os.listdir(images_path)
-            full_path_list = [os.path.join(images_path, file) for file in files_list]
-            print(full_path_list)
+            # files_list = os.listdir(images_path)
+            # full_path_list = [os.path.join(images_path, file) for file in files_list]
+            # print(full_path_list)
 
+
+            # Replace the existing image upload code with:
+            try:
+                # Generate path string for all images
+                images_directory = single_row['Images Path']
+                print(f"Looking for images in: {images_directory}")
+                image_paths = generate_multiple_images_path(images_directory)
+                
+                if image_paths:
+                    # Upload the images
+                    success = input_file_add_files(
+                        driver,
+                        'input[accept="image/*,image/heif,image/heic"]',
+                        image_paths
+                    )
+                    if not success:
+                        print("Failed to upload images, continuing with next listing")
+                        continue
+                    
+                    # Give extra time for upload to complete
+                    time.sleep(5)
+                else:
+                    print("No valid images found, continuing with next listing")
+                    continue
+                    
+            except Exception as e:
+                print(f"Unexpected error during image upload: {str(e)}")
+                continue
             time.sleep(3)
             # Location
             driver.find_element(By.XPATH, "//span[text()='Location']/../input").send_keys(Keys.CONTROL, "A")
