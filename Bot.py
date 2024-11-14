@@ -51,40 +51,63 @@ def specific_clicker2(driver, ele):
 
 def generate_multiple_images_path(images_path):
     """
-    Generate properly formatted string of image paths.
+    Generate sorted string of image paths with custom sorting logic:
+    - Files starting with numbers (01, 1, etc.) come first
+    - Files starting with letters (A, B, etc.) come next
+    - Remaining files are sorted alphabetically
     """
     if not os.path.exists(images_path):
         print(f"ERROR: Directory does not exist: {images_path}")
         return None
         
+    def sort_key(filename):
+        """Custom sort key function for image files"""
+        name = filename.lower()
+        # Check for numeric prefix (01, 1, etc.)
+        if name[0].isdigit():
+            # Pad single digits with zero for proper sorting (1 -> 01)
+            numeric_part = ''.join(c for c in name if c.isdigit())
+            return (0, numeric_part.zfill(2), name)
+        # Check for alphabetic prefix (A, B, etc.)
+        elif name[0].isalpha():
+            return (1, name[0], name)
+        # Other files come last
+        return (2, name, name)
+    
     valid_files = []
     for root, dirs, files in os.walk(images_path):
         for file in files:
-            # Accept any image file including webp
             if file.lower().endswith(('.jpg', '.jpeg', '.png', '.heif', '.heic', '.webp')):
                 file_path = os.path.join(root, file)
-                valid_files.append(os.path.abspath(file_path))
+                valid_files.append((file, os.path.abspath(file_path)))
     
     if not valid_files:
         print(f"ERROR: No valid images found in {images_path}")
         return None
-        
-    print(f"Found {len(valid_files)} valid images:")
-    for file in valid_files:
-        print(f"  - {file}")
-        
-    return '\n'.join(valid_files)
+    
+    # Sort files using custom sort key
+    sorted_files = sorted(valid_files, key=lambda x: sort_key(x[0]))
+    
+    # Print sorted list for verification
+    print(f"\nFound {len(sorted_files)} valid images (in upload order):")
+    for i, (filename, filepath) in enumerate(sorted_files, 1):
+        print(f"  {i}. {filename}")
+        if i == 1:
+            print(f"     ^ This will be the feature image")
+    print()
+    
+    # Return only the file paths, joined by newlines
+    return '\n'.join(file[1] for file in sorted_files)
 
 def input_file_add_files(driver, selector, files):
     """
-    Add files to an input element without unnecessary checks.
+    Add sorted files to input element.
     """
     if not files:
         print("No valid files provided for upload")
         return False
         
     try:
-        # Wait for input file element to be present
         input_file = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, selector))
         )
@@ -96,7 +119,7 @@ def input_file_add_files(driver, selector, files):
     time.sleep(2)
 
     try:
-        print("Attempting to upload files...")
+        print("Uploading images in specified order...")
         input_file.send_keys(files)
         print("Files sent successfully")
         time.sleep(3)  # Wait for upload to complete
@@ -183,13 +206,11 @@ for single_profile in list_of_profiles:
 
             # Replace the existing image upload code with:
             try:
-                # Generate path string for all images
                 images_directory = single_row['Images Path']
-                print(f"Looking for images in: {images_directory}")
+                print(f"Processing images from: {images_directory}")
                 image_paths = generate_multiple_images_path(images_directory)
                 
                 if image_paths:
-                    # Upload the images
                     success = input_file_add_files(
                         driver,
                         'input[accept="image/*,image/heif,image/heic"]',
@@ -199,7 +220,6 @@ for single_profile in list_of_profiles:
                         print("Failed to upload images, continuing with next listing")
                         continue
                     
-                    # Give extra time for upload to complete
                     time.sleep(5)
                 else:
                     print("No valid images found, continuing with next listing")
