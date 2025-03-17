@@ -49,6 +49,52 @@ def specific_clicker2(driver, ele):
     except Exception as e:
         pass
 
+# Add this function to your Bot.py file
+def select_facebook_groups(driver, max_groups=20):
+    """
+    Select Facebook groups to cross-post the listing to (maximum 20 groups)
+    """
+    print("Selecting Facebook groups to cross-post...")
+    try:
+        # Wait for the "List in more places" page to load
+        time.sleep(5)
+        
+        # Find all group checkboxes
+        # The groups have elements with role="checkbox" and aria-checked="false"
+        group_checkboxes = driver.find_elements(By.XPATH, "//div[@role='checkbox' and @aria-checked='false']")
+        
+        # Select up to max_groups
+        groups_selected = 0
+        for checkbox in group_checkboxes:
+            try:
+                # Try to scroll the element into view and click it
+                driver.execute_script("arguments[0].scrollIntoView(true);", checkbox)
+                time.sleep(0.5)  # Short wait after scrolling
+                
+                # Click the checkbox
+                webdriver.ActionChains(driver).move_to_element(checkbox).click(checkbox).perform()
+                groups_selected += 1
+                print(f"Selected group {groups_selected}")
+                
+                # Break if we've selected the maximum number of groups
+                if groups_selected >= max_groups:
+                    print(f"Maximum number of groups ({max_groups}) selected")
+                    break
+                    
+                # Short wait between selections to avoid Facebook throttling
+                time.sleep(1)
+                
+            except Exception as e:
+                print(f"Failed to select a group: {str(e)}")
+                continue
+                
+        print(f"Successfully selected {groups_selected} groups")
+        return groups_selected
+        
+    except Exception as e:
+        print(f"Error selecting Facebook groups: {str(e)}")
+        return 0
+
 def generate_multiple_images_path(images_path):
     """
     Generate sorted string of image paths with custom sorting logic:
@@ -356,6 +402,9 @@ for single_profile in list_of_profiles:
             except Exception as e:
                 print(f"Error clicking 'Next' button: {str(e)}")
 
+            # Add our new group selection function here:
+            groups_selected = select_facebook_groups(driver, max_groups=20)
+            print(f"Selected {groups_selected} groups for cross-posting")
             # Wait for and click the Publish button
             try:
                 publish_button = WebDriverWait(driver, 10).until(
