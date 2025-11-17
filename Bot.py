@@ -206,8 +206,9 @@ for single_profile in list_of_profiles:
     options.add_argument('--no-first-run')
     options.add_argument('--no-default-browser-check')
 
-    service = Service(executable_path=r"C:\WebDrivers\chromedriver.exe")  # Adjust this path
-    driver = webdriver.Chrome(service=service, options=options)
+    # service = Service(executable_path=r"C:\WebDrivers\chromedriver.exe")  # Adjust this path/
+    # driver = webdriver.Chrome(service=service, options=options)
+    driver = webdriver.Chrome(options=options)
     driver.maximize_window()
     print(df)
     for index, single_row in df.iterrows():

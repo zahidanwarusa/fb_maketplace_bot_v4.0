@@ -64,3 +64,8 @@ test_listings.csv
 test_profiles.json
 test_*.json
 test_*.csv
+
+.env
+*.env
+selected_profiles.txt
+selected_listings.csv
