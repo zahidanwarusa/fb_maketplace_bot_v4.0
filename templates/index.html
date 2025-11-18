@@ -543,13 +543,17 @@
                     <i class="fas fa-plus-circle"></i>
                     <span>Add Listing</span>
                 </div>
-                <div class="menu-item" :class="{'active': activeTab === 'media'}" @click="activeTab = 'media'; loadDriveFiles()">
+                <div class="menu-item" :class="{'active': activeTab === 'media'}" @click="activeTab = 'media'; loadDriveStructure()">
                     <i class="fas fa-images"></i>
                     <span>Media Library</span>
                 </div>
                 <div class="menu-item" :class="{'active': activeTab === 'history'}" @click="activeTab = 'history'; loadUploadHistory()">
                     <i class="fas fa-history"></i>
                     <span>Upload History</span>
+                </div>
+                <div class="menu-item" :class="{'active': activeTab === 'deleted'}" @click="activeTab = 'deleted'; loadDeletedListings()">
+                    <i class="fas fa-trash-restore"></i>
+                    <span>Deleted Listings</span>
                 </div>
                 <div class="menu-item" :class="{'active': activeTab === 'schedule'}" @click="activeTab = 'schedule'; loadScheduledPosts()">
                     <i class="fas fa-calendar-alt"></i>
@@ -737,7 +741,36 @@
                                         </div>
                                     </div>
                                     
-                                    <!-- Location Input -->
+                                    
+                                    <!-- Notifications Section -->
+                                    <div v-if="profile.facebook_accounts && profile.facebook_accounts.length > 0" 
+                                         style="background: #eff6ff; padding: 10px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #3b82f6;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <i class="fas fa-bell" style="color: #3b82f6;"></i>
+                                                <span style="font-size: 13px; font-weight: 600; color: #1e40af;">Notifications</span>
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <span v-if="profileNotifications[profile.folder_name]" 
+                                                      :class="profileNotifications[profile.folder_name].notification_count > 0 ? 'badge badge-error' : 'badge badge-success'"
+                                                      style="font-size: 11px;">
+                                                    [[ profileNotifications[profile.folder_name].notification_count || 0 ]]
+                                                </span>
+                                                <button @click="checkNotifications(profile.folder_name)" 
+                                                        :disabled="checkingNotifications"
+                                                        class="btn btn-primary" 
+                                                        style="padding: 4px 12px; font-size: 12px;">
+                                                    <i :class="checkingNotifications ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'"></i>
+                                                    [[ checkingNotifications ? 'Checking...' : 'Check' ]]
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div v-if="profileNotifications[profile.folder_name] && profileNotifications[profile.folder_name].last_checked" 
+                                             style="font-size: 11px; color: #64748b; margin-top: 6px;">
+                                            Last checked: [[ formatDateTime(profileNotifications[profile.folder_name].last_checked) ]]
+                                        </div>
+                                    </div>
+                                                                        <!-- Location Input -->
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <i class="fas fa-map-marker-alt" style="color: #667eea;"></i>
                                         <input type="text" 
@@ -770,7 +803,7 @@
                                     <th style="width: 40px;">
                                         <input type="checkbox" 
                                                @change="toggleAllListings"
-                                               :checked="selectedListings.length === listings.length && listings.length > 0"
+                                               :checked="allListingsSelected"
                                                class="custom-checkbox">
                                     </th>
                                     <th>Vehicle</th>
@@ -783,7 +816,7 @@
                             <tbody>
                                 <tr v-for="(listing, index) in listings" :key="index">
                                     <td>
-                                        <input type="checkbox" v-model="selectedListings" :value="index" class="custom-checkbox">
+                                        <input type="checkbox" v-model="selectedListings" :value="listing.id" class="custom-checkbox">
                                     </td>
                                     <td>
                                         <div style="display: flex; align-items: center; gap: 12px;">
@@ -798,7 +831,7 @@
                                     </td>
                                     <td>
                                         <div style="color: #4a5568;">[[ listing['Body Style'] ]]</div>
-                                        <div style="color: #718096; font-size: 13px;">[[ listing['Exterior Color'] ]] â€¢ [[ listing.Mileage?.toLocaleString() ]] mi</div>
+                                        <div style="color: #718096; font-size: 13px;">[[ listing['Exterior Color'] ]] ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ [[ listing.Mileage?.toLocaleString() ]] mi</div>
                                     </td>
                                     <td>
                                         <div style="font-size: 18px; font-weight: 700; color: #1a202c;">
@@ -808,10 +841,10 @@
                                     
                                     <td>
                                         <div style="display: flex; gap: 8px;">
-                                            <button @click="editListing(index)" class="btn btn-secondary" style="padding: 8px 12px;">
+                                            <button @click="editListing(listing.id)" class="btn btn-secondary" style="padding: 8px 12px;">
                                                 <i class="fas fa-edit"></i>
                                             </button>
-                                            <button @click="confirmDelete(index)" class="btn btn-danger" style="padding: 8px 12px;">
+                                            <button @click="confirmDelete(listing.id)" class="btn btn-danger" style="padding: 8px 12px;">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         </div>
@@ -932,21 +965,26 @@
                     <div class="card-header">
                         <div class="card-title">Media Library</div>
                         <div style="display: flex; gap: 12px;">
+                            <button @click="createFolderPrompt" class="btn btn-success">
+                                <i class="fas fa-folder-plus"></i> New Folder
+                            </button>
                             <button @click="openFileUpload('standalone')" class="btn btn-success">
                                 <i class="fas fa-upload"></i> Upload
                             </button>
-                            <button @click="loadDriveFiles" class="btn btn-secondary">
+                            <button @click="loadDriveStructure" class="btn btn-secondary">
                                 <i class="fas fa-sync-alt"></i> Refresh
                             </button>
                         </div>
                     </div>
 
+                    <!-- Loading State -->
                     <div v-if="loadingMedia" class="empty-state">
                         <div class="spinner" style="margin: 0 auto 20px;"></div>
                         <p style="font-weight: 600; color: #4a5568;">Loading media files...</p>
                     </div>
 
-                    <div v-else-if="driveFiles.length === 0" class="empty-state">
+                    <!-- Empty State -->
+                    <div v-else-if="driveStructure.root.files.length === 0 && driveStructure.folders.length === 0" class="empty-state">
                         <i class="fas fa-folder-open"></i>
                         <h3 style="font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No files found</h3>
                         <p style="margin-bottom: 24px;">Upload some files to get started</p>
@@ -955,21 +993,104 @@
                         </button>
                     </div>
 
+                    <!-- Content -->
                     <div v-else>
-                        <div class="file-grid">
-                            <div v-for="file in driveFiles" :key="file.id" class="file-card">
-                                <div style="aspect-ratio: 1; background: #f1f3f5; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                                    <img v-if="file.thumbnailLink" :src="file.thumbnailLink" :alt="file.name" style="width: 100%; height: 100%; object-fit: cover;">
-                                    <i v-else :class="getFileIcon(file.mimeType)" style="font-size: 40px; color: #cbd5e0;"></i>
+                        <!-- Root Files -->
+                        <div v-if="driveStructure.root.files.length > 0" style="margin-bottom: 32px;">
+                            <h4 style="font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-folder-open" style="color: #667eea;"></i>
+                                Root Files ([[ driveStructure.root.file_count ]])
+                            </h4>
+                            <div class="file-grid">
+                                <div v-for="file in driveStructure.root.files" :key="file.id" class="file-card">
+                                    <div style="aspect-ratio: 1; background: #f1f3f5; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                                        <img v-if="file.thumbnailLink" :src="file.thumbnailLink" :alt="file.name" style="width: 100%; height: 100%; object-fit: cover;">
+                                        <i v-else :class="getFileIcon(file.mimeType)" style="font-size: 40px; color: #cbd5e0;"></i>
+                                    </div>
+                                    <div style="font-size: 13px; font-weight: 600; color: #1a202c; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="file.name">[[ file.name ]]</div>
+                                    <div style="font-size: 12px; color: #718096; margin-bottom: 12px;">[[ file.sizeFormatted ]]</div>
+                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+                                        <button @click="viewFile(file)" class="btn btn-secondary" style="padding: 6px; font-size: 12px;">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button @click="confirmDeleteMedia(file)" class="btn btn-danger" style="padding: 6px; font-size: 12px;">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div style="font-size: 13px; font-weight: 600; color: #1a202c; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="file.name">[[ file.name ]]</div>
-                                <div style="font-size: 12px; color: #718096; margin-bottom: 12px;">[[ file.sizeFormatted ]]</div>
-                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-                                    <button @click="viewFile(file)" class="btn btn-secondary" style="padding: 6px; font-size: 12px;">
-                                        <i class="fas fa-eye"></i>
-                                    </button>
-                                    <button @click="confirmDeleteMedia(file)" class="btn btn-danger" style="padding: 6px; font-size: 12px;">
-                                        <i class="fas fa-trash"></i>
+                            </div>
+                        </div>
+
+                        <!-- Folders -->
+                        <div v-if="driveStructure.folders.length > 0">
+                            <h4 style="font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-folder" style="color: #667eea;"></i>
+                                Folders ([[ driveStructure.folders.length ]])
+                            </h4>
+
+                            <div v-for="folder in driveStructure.folders" :key="folder.id" 
+                                 style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+
+                                <!-- Folder Header -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;"
+                                     @click="toggleFolder(folder.id)">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <i :class="showFolderContent[folder.id] ? 'fas fa-folder-open' : 'fas fa-folder'" 
+                                           style="font-size: 24px; color: #667eea;"></i>
+                                        <div>
+                                            <div style="font-weight: 600; font-size: 16px; color: #1a202c;">[[ folder.name ]]</div>
+                                            <div style="color: #718096; font-size: 13px;">[[ folder.file_count ]] file(s)</div>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button @click.stop="openFileUploadToFolder(folder.name)" 
+                                                class="btn btn-success" 
+                                                style="padding: 8px 12px;"
+                                                title="Upload to this folder">
+                                            <i class="fas fa-upload"></i>
+                                        </button>
+                                        <button @click.stop="deleteFolder(folder)" 
+                                                class="btn btn-danger" 
+                                                style="padding: 8px 12px;"
+                                                title="Delete folder">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                        <button class="btn btn-secondary" style="padding: 8px 12px;">
+                                            <i :class="showFolderContent[folder.id] ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Folder Files (Expanded) -->
+                                <div v-if="showFolderContent[folder.id] && folder.files.length > 0" 
+                                     style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+                                    <div class="file-grid">
+                                        <div v-for="file in folder.files" :key="file.id" class="file-card">
+                                            <div style="aspect-ratio: 1; background: #f1f3f5; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                                                <img v-if="file.thumbnailLink" :src="file.thumbnailLink" :alt="file.name" style="width: 100%; height: 100%; object-fit: cover;">
+                                                <i v-else :class="getFileIcon(file.mimeType)" style="font-size: 40px; color: #cbd5e0;"></i>
+                                            </div>
+                                            <div style="font-size: 13px; font-weight: 600; color: #1a202c; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="file.name">[[ file.name ]]</div>
+                                            <div style="font-size: 12px; color: #718096; margin-bottom: 12px;">[[ file.sizeFormatted ]]</div>
+                                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+                                                <button @click="viewFile(file)" class="btn btn-secondary" style="padding: 6px; font-size: 12px;">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button @click="confirmDeleteMedia(file)" class="btn btn-danger" style="padding: 6px; font-size: 12px;">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Empty Folder State -->
+                                <div v-else-if="showFolderContent[folder.id] && folder.files.length === 0"
+                                     style="padding: 30px; text-align: center; color: #718096; background: #f7fafc; border-radius: 8px; margin-top: 16px;">
+                                    <i class="fas fa-inbox" style="font-size: 32px; opacity: 0.3; margin-bottom: 8px;"></i>
+                                    <p>No files in this folder</p>
+                                    <button @click="openFileUploadToFolder(folder.name)" class="btn btn-success" style="margin-top: 12px;">
+                                        <i class="fas fa-upload"></i> Upload Files
                                     </button>
                                 </div>
                             </div>
@@ -977,7 +1098,6 @@
                     </div>
                 </div>
             </div>
-
             <!-- History Tab -->
             <div v-if="activeTab === 'history'">
                 <div class="stats-grid" style="margin-bottom: 24px;">
@@ -1276,6 +1396,86 @@
         </div>
 
         <!-- Modal (simplified version - you can add edit modal, media picker, etc. following the same pattern) -->
+            <!-- Deleted Listings Tab -->
+            <div v-if="activeTab === 'deleted'">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Deleted Listings</div>
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <span class="badge badge-info">[[ deletedListings.length ]] Total</span>
+                            <button @click="loadDeletedListings" class="btn btn-secondary">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div v-if="loadingDeleted" class="empty-state">
+                        <div class="spinner" style="margin: 0 auto 20px;"></div>
+                        <p style="font-weight: 600; color: #4a5568;">Loading deleted listings...</p>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div v-else-if="deletedListings.length === 0" class="empty-state">
+                        <i class="fas fa-inbox" style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;"></i>
+                        <h3 style="font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No Deleted Listings</h3>
+                        <p style="color: #718096;">Deleted listings will appear here and can be restored</p>
+                    </div>
+
+                    <!-- Deleted Listings Table -->
+                    <div v-else class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Vehicle</th>
+                                    <th>Details</th>
+                                    <th>Price</th>
+                                    <th>Deleted</th>
+                                    <th style="width: 180px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(listing, index) in deletedListings" :key="listing.id" style="opacity: 0.8;">
+                                    <td>
+                                        <div style="display: flex; align-items: center; gap: 12px;">
+                                            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                                <i class="fas fa-car" style="color: white; font-size: 20px;"></i>
+                                            </div>
+                                            <div>
+                                                <div style="font-weight: 600; color: #1a202c;">[[ listing.Year ]] [[ listing.Make ]]</div>
+                                                <div style="color: #718096; font-size: 14px;">[[ listing.Model ]]</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="color: #4a5568;">[[ listing['Body Style'] ]]</div>
+                                        <div style="color: #718096; font-size: 13px;">[[ formatNumber(listing.Mileage) ]] miles</div>
+                                    </td>
+                                    <td style="font-weight: 600; color: #48bb78; font-size: 16px;">
+                                        $[[ formatNumber(listing.Price) ]]
+                                    </td>
+                                    <td>
+                                        <div style="font-size: 13px; color: #718096;">
+                                            [[ formatDateTime(listing.deleted_at) ]]
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="display: flex; gap: 8px;">
+                                            <button @click="restoreListing(listing.id)" class="btn btn-success" style="padding: 8px 16px; font-size: 13px;">
+                                                <i class="fas fa-undo"></i> Restore
+                                            </button>
+                                            <button @click="permanentlyDeleteListing(listing.id)" class="btn btn-danger" style="padding: 8px 16px; font-size: 13px;">
+                                                <i class="fas fa-trash"></i> Delete Forever
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         <div v-if="dialog.show" class="fixed inset-0 modal-overlay flex items-center justify-center z-50" @click="dialog.show = false">
             <div class="modal-content" style="padding: 32px;" @click.stop>
                 <div style="text-align: center;">
@@ -1304,6 +1504,21 @@
                     <button @click="closeMediaPicker" style="background: none; border: none; color: #718096; cursor: pointer; font-size: 24px;">
                         <i class="fas fa-times"></i>
                     </button>
+                </div>
+
+                <div style="margin-bottom: 20px; padding: 12px; background: #f7fafc; border-radius: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+                        <input type="checkbox" 
+                               v-model="imagePickerMode" 
+                               true-value="multi" 
+                               false-value="single"
+                               @change="selectedImages = []"
+                               class="custom-checkbox">
+                        <span style="font-weight: 500;">Enable multi-select mode</span>
+                        <span v-if="imagePickerMode === 'multi'" class="badge badge-info">
+                            [[ selectedImages.length ]] selected
+                        </span>
+                    </label>
                 </div>
 
                 <!-- Search -->
@@ -1642,7 +1857,9 @@
                     Transmission: '',
                     Description: '',
                     'Images Path': '',
-                    'selectedDay': ''
+                    'selectedDay': '',
+                    image_ids: [],
+                    image_folder: ''
                 },
                 days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
                 colorOptions: [
@@ -1668,11 +1885,30 @@
                 fuelTypes: [
                     'Diesel', 'Electric', 'Gasoline', 'Flex', 'Hybrid', 
                     'Petrol', 'Plug-in hybrid', 'Other'
-                ]
-            },
+                ],
+                driveStructure: {
+        root: { id: '', name: '', file_count: 0, files: [] },
+        folders: []
+    },
+    showFolderContent: {},
+    imagePickerMode: 'single',
+    selectedImages: [],
+    currentFolder: '',
+    imagePreviews: [],
+                    deletedListings: [],
+                showDeletedListings: false,
+                loadingDeleted: false,
+                profileNotifications: {},
+                checkingNotifications: false,
+    
+                },
+
             computed: {
                 hasSelections() {
                     return this.selectedProfiles.length > 0 && this.selectedListings.length > 0;
+                },
+                allListingsSelected() {
+                    return this.listings.length > 0 && this.selectedListings.length === this.listings.length;
                 }
             },
             methods: {
@@ -1683,7 +1919,8 @@
                         'listings': 'Vehicle Listings',
                         'add-listing': 'Add New Listing',
                         'media': 'Media Library',
-                        'history': 'Upload History'
+                        'history': 'Upload History',
+                        'deleted': 'Deleted Listings'
                     };
                     return titles[this.activeTab] || 'Dashboard';
                 },
@@ -1694,9 +1931,13 @@
                         'listings': 'Manage your vehicle listings',
                         'add-listing': 'Create a new vehicle listing',
                         'media': 'Manage your media files in Google Drive',
-                        'history': 'View upload history and statistics'
+                        'history': 'View upload history and statistics',
+                        'deleted': 'Restore previously deleted listings'
                     };
                     return subtitles[this.activeTab] || '';
+                },
+                isProfileSelected(profile) {
+                    return this.selectedProfiles.some(p => p.folder_name === profile.folder_name);
                 },
                 onProfileCheckboxChange(event, profile) {
                     const isChecked = event.target.checked;
@@ -1845,17 +2086,28 @@
                 },
                 async confirmDelete(index) {
                     const confirmed = await this.showDialog('confirm', 'Confirm Delete', 'Delete this listing?', 'Delete');
-                    if (confirmed) {
-                        axios.post('/delete_listing', { index: index })
-                            .then(response => {
-                                if (response.data.status === 'success') {
-                                    this.listings.splice(index, 1);
-                                    this.showToast('success', 'Listing deleted');
-                                }
-                            })
-                            .catch(error => {
-                                this.showDialog('error', 'Error', 'Failed to delete listing.');
-                            });
+                    if (!confirmed) return;
+                    
+                    try {
+                        const response = await axios.post('/delete_listing', { index: index });
+                        
+                        if (response.data.status === 'success') {
+                            // Remove from active listings
+                            this.listings.splice(index, 1);
+                            
+                            // Show success message
+                            this.showToast('success', 'Listing moved to deleted listings');
+                            
+                            // ✅ CRITICAL FIX: Reload deleted listings
+                            await this.loadDeletedListings();
+                            
+                        } else {
+                            this.showToast('error', response.data.message || 'Failed to delete listing');
+                        }
+                    } catch (error) {
+                        console.error('Error deleting listing:', error);
+                        const errorMessage = error.response?.data?.message || 'Failed to delete listing';
+                        this.showDialog('error', 'Error', errorMessage);
                     }
                 },
                 toggleAllListings(event) {
@@ -1980,7 +2232,12 @@
                         .then(response => {
                             if (response.data.status === 'success') {
                                 this.showToast('success', 'File deleted!');
-                                this.loadDriveFiles();
+                                // Reload structure if in media tab, otherwise reload files list
+                                if (this.activeTab === 'media') {
+                                    this.loadDriveStructure();
+                                } else {
+                                    this.loadDriveFiles();
+                                }
                             }
                         });
                     }
@@ -2040,7 +2297,88 @@
                     this.mediaSearch = '';
                     this.loadDriveFiles();
                 },
-                openFileUpload(mode) {
+                // ========================================================================
+                // FOLDER MANAGEMENT METHODS FOR MEDIA LIBRARY
+                // ========================================================================
+                
+                loadDriveStructure() {
+                    console.log('Loading Google Drive folder structure...');
+                    this.loadingMedia = true;
+                    axios.get('/get_drive_structure')
+                        .then(response => {
+                            if (response.data.status === 'success') {
+                                this.driveStructure = response.data.structure;
+                                console.log(`Loaded structure: ${this.driveStructure.folders.length} folders`);
+                                // Initialize showFolderContent for each folder
+                                this.driveStructure.folders.forEach(folder => {
+                                    this.$set(this.showFolderContent, folder.id, false);
+                                });
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading structure:', error);
+                            this.showToast('error', 'Failed to load folder structure');
+                        })
+                        .finally(() => {
+                            this.loadingMedia = false;
+                        });
+                },
+                
+                toggleFolder(folderId) {
+                    this.$set(this.showFolderContent, folderId, !this.showFolderContent[folderId]);
+                },
+                
+                async createFolderPrompt() {
+                    const folderName = prompt('Enter folder name (e.g., 2024-Honda-Civic):');
+                    if (!folderName || !folderName.trim()) {
+                        return;
+                    }
+                    
+                    try {
+                        const response = await axios.post('/create_drive_folder', {
+                            folder_name: folderName.trim()
+                        });
+                        
+                        if (response.data.status === 'success') {
+                            this.showToast('success', `Folder "${folderName}" created!`);
+                            this.loadDriveStructure();
+                        }
+                    } catch (error) {
+                        console.error('Error creating folder:', error);
+                        this.showDialog('error', 'Error', 
+                            error.response?.data?.message || 'Failed to create folder');
+                    }
+                },
+                
+                async deleteFolder(folder) {
+                    const confirmed = await this.showDialog('confirm', 'Delete Folder?', 
+                        `Delete "${folder.name}" and all its files?`, 'Delete');
+                    if (!confirmed) return;
+                    
+                    try {
+                        const response = await axios.post('/delete_drive_folder', {
+                            folder_id: folder.id
+                        });
+                        
+                        if (response.data.status === 'success') {
+                            this.showToast('success', 'Folder deleted');
+                            this.loadDriveStructure();
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        this.showToast('error', 'Failed to delete folder');
+                    }
+                },
+                
+                openFileUploadToFolder(folderName) {
+                    this.currentFolder = folderName;
+                    this.pickerMode = 'standalone';
+                    this.showUploadModal = true;
+                    this.selectedFiles = [];
+                    this.uploadProgress = 0;
+                },
+openFileUpload(mode) {
+                    this.currentFolder = '';  // Reset folder when opening upload modal
                     this.pickerMode = mode;
                     this.showUploadModal = true;
                     this.selectedFiles = [];
@@ -2051,6 +2389,7 @@
                         this.showUploadModal = false;
                         this.selectedFiles = [];
                         this.uploadProgress = 0;
+                        this.currentFolder = '';  // Reset current folder
                     }
                 },
                 handleFileSelect(event) {
@@ -2105,7 +2444,11 @@
                             
                             // Close upload modal and refresh files
                             this.closeUploadModal();
-                            this.loadDriveFiles();
+                            if (this.activeTab === 'media') {
+                                this.loadDriveStructure();
+                            } else {
+                                this.loadDriveFiles();
+                            }
                             return;
                         }
                         
@@ -2113,7 +2456,13 @@
                         const formData = new FormData();
                         formData.append('file', file);
                         
-                        console.log(`Uploading file ${index + 1}/${totalFiles}: ${file.name}`);
+                        // Add folder name if uploading to a specific folder
+                        if (this.currentFolder) {
+                            formData.append('folder_name', this.currentFolder);
+                            console.log(`Uploading file ${index + 1}/${totalFiles} to folder "${this.currentFolder}": ${file.name}`);
+                        } else {
+                            console.log(`Uploading file ${index + 1}/${totalFiles}: ${file.name}`);
+                        }
                         
                         axios.post('/upload_to_drive', formData, {
                             headers: {
@@ -2289,11 +2638,187 @@
                     }
                 }
             },
+                // ========================================================================
+                // NOTIFICATIONS METHODS
+                // ========================================================================
+                
+                async checkNotifications(profileFolder) {
+                    if (this.checkingNotifications) {
+                        return;
+                    }
+                    
+                    this.checkingNotifications = true;
+                    this.showToast('info', 'Checking notifications...');
+                    
+                    try {
+                        const response = await axios.get(`/check_notifications/${profileFolder}`);
+                        
+                        if (response.data.status === 'success') {
+                            // Update profile notifications data
+                            this.$set(this.profileNotifications, profileFolder, response.data);
+                            
+                            const count = response.data.notification_count;
+                            if (count > 0) {
+                                this.showToast('success', `Found ${count} notification(s)!`);
+                            } else {
+                                this.showToast('info', 'No new notifications');
+                            }
+                        } else {
+                            this.showToast('warning', response.data.message || 'Could not check notifications');
+                        }
+                    } catch (error) {
+                        console.error('Error checking notifications:', error);
+                        this.showToast('error', 'Failed to check notifications');
+                    } finally {
+                        this.checkingNotifications = false;
+                    }
+                },
+                
+                loadAllNotifications() {
+                    // Load cached notification data for all profiles
+                    axios.get('/get_all_notifications')
+                        .then(response => {
+                            if (response.data.status === 'success') {
+                                response.data.notifications.forEach(notif => {
+                                    this.$set(this.profileNotifications, notif.profile_folder, notif);
+                                });
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading notifications:', error);
+                        });
+                },
+                
+                // ========================================================================
+                // DELETED LISTINGS METHODS
+                // ========================================================================
+                
+                loadDeletedListings() {
+                    this.loadingDeleted = true;
+                    
+                    axios.get('/get_deleted_listings')
+                        .then(response => {
+                            if (response.data.status === 'success') {
+                                this.deletedListings = response.data.deleted_listings;
+                                console.log(`✅ Loaded ${this.deletedListings.length} deleted listings`);
+                            } else {
+                                this.showToast('error', 'Failed to load deleted listings');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('❌ Error loading deleted listings:', error);
+                            const errorMessage = error.response?.data?.message || 'Failed to load deleted listings';
+                            this.showToast('error', errorMessage);
+                        })
+                        .finally(() => {
+                            this.loadingDeleted = false;
+                        });
+                },
+                
+                async restoreListing(listingId) {
+                    const confirmed = await this.showDialog('confirm', 'Restore Listing', 
+                        'Restore this listing to active listings?', 'Restore');
+                    if (!confirmed) return;
+                    
+                    try {
+                        const response = await axios.post('/restore_listing', { id: listingId });
+                        
+                        if (response.data.status === 'success') {
+                            this.showToast('success', 'Listing restored successfully!');
+                            
+                            // Remove from deleted list
+                            this.deletedListings = this.deletedListings.filter(l => l.id !== listingId);
+                            
+                            // ✅ Reload active listings to show the restored item
+                            this.loadListings();
+                            
+                        } else {
+                            this.showToast('error', response.data.message || 'Failed to restore listing');
+                        }
+                    } catch (error) {
+                        console.error('Error restoring listing:', error);
+                        const errorMessage = error.response?.data?.message || 'Failed to restore listing';
+                        this.showToast('error', errorMessage);
+                    }
+                },
+                
+                async permanentlyDeleteListing(listingId) {
+                    const confirmed = await this.showDialog('confirm', 'Permanently Delete', 
+                        'Are you sure? This action cannot be undone!', 'Delete Forever');
+                    if (!confirmed) return;
+                    
+                    // Double confirmation for permanent delete
+                    const doubleConfirmed = await this.showDialog('confirm', 'Final Confirmation', 
+                        'This will PERMANENTLY delete the listing. Are you absolutely sure?', 'Yes, Delete Forever');
+                    if (!doubleConfirmed) return;
+                    
+                    try {
+                        const response = await axios.post('/permanently_delete_listing', { id: listingId });
+                        
+                        if (response.data.status === 'success') {
+                            this.showToast('success', 'Listing permanently deleted');
+                            
+                            // Remove from deleted list
+                            this.deletedListings = this.deletedListings.filter(l => l.id !== listingId);
+                            
+                        } else {
+                            this.showToast('error', response.data.message || 'Failed to permanently delete');
+                        }
+                    } catch (error) {
+                        console.error('Error permanently deleting listing:', error);
+                        const errorMessage = error.response?.data?.message || 'Failed to permanently delete listing';
+                        this.showToast('error', errorMessage);
+                    }
+                },
+                
+                // ========================================================================
+                // HELPER METHODS
+                // ========================================================================
+                
+                formatDateTime(datetime) {
+                    if (!datetime) return 'N/A';
+                    try {
+                        const date = new Date(datetime);
+                        return date.toLocaleString('en-US', { 
+                            year: 'numeric', 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                    } catch (e) {
+                        return 'N/A';
+                    }
+                },
+                
+                formatNumber(num) {
+                    if (!num) return '0';
+                    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                },
+                
+                loadListings() {
+                    // Reload active listings
+                    axios.get('/get_listings')
+                        .then(response => {
+                            if (response.data.status === 'success') {
+                                this.listings = response.data.listings;
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading listings:', error);
+                        });
+                },
+                
+
             mounted() {
                 // Load initial data
                 if (this.uploadHistory.length === 0) {
                     this.loadUploadHistory();
                 }
+                // Load cached notifications
+                this.loadAllNotifications();
+                // ✅ Load deleted listings on startup
+                this.loadDeletedListings();
             }
         });
     </script>

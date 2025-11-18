@@ -69,3 +69,5 @@ test_*.csv
 *.env
 selected_profiles.txt
 selected_listings.csv
+credentials.json
+token.pickle

@@ -11,9 +11,16 @@ import csv
 import io
 from werkzeug.utils import secure_filename
 from google_drive_manager import get_drive_manager
+from facebook_account_detector import get_facebook_accounts_from_profile
 import traceback
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+import time
 import logging
-from facebook_account_detector import get_facebook_accounts_from_profile, get_facebook_login_status
 
 # Configure logging
 logging.basicConfig(
@@ -81,7 +88,7 @@ except Exception as e:
 # ============================================================================
 
 def get_chrome_profiles():
-    """Get all Chrome profiles from the system with Facebook account information"""
+    """Get all Chrome profiles from the system with Facebook account detection"""
     try:
         user_data_dir = os.path.expandvars(r'%LOCALAPPDATA%\Google\Chrome\User Data')
         profiles = []
@@ -121,20 +128,21 @@ def get_chrome_profiles():
                     # Get location for this profile from Supabase
                     location = profile_locations.get(folder_name, '')
                     
-                    # Get Facebook accounts for this profile
+                    # NEW: Detect Facebook accounts for this profile
                     facebook_accounts = []
                     try:
                         facebook_accounts = get_facebook_accounts_from_profile(profile_dir)
+                        if facebook_accounts:
+                            logger.info(f"Found {len(facebook_accounts)} Facebook account(s) in {folder_name}")
                     except Exception as e:
-                        logger.error(f"Error getting Facebook accounts for {folder_name}: {e}")
+                        logger.warning(f"Could not detect Facebook accounts for {folder_name}: {str(e)}")
                     
                     profiles.append({
                         'folder_name': folder_name,
                         'user_name': user_name,
                         'path': profile_dir,
                         'location': location,
-                        'facebook_accounts': facebook_accounts,
-                        'has_facebook': len(facebook_accounts) > 0
+                        'facebook_accounts': facebook_accounts
                     })
             except Exception as e:
                 logger.error(f"Error processing profile directory {profile_dir}: {str(e)}")
@@ -147,6 +155,7 @@ def get_chrome_profiles():
         logger.error(f"Critical error in get_chrome_profiles: {str(e)}")
         logger.error(traceback.format_exc())
         return []
+
 
 
 def get_profile_locations_dict():
@@ -189,97 +198,6 @@ def format_file_size(size_bytes):
         return "Unknown"
 
 
-def start_upload_tracking(profile_name, profile_folder, listing_data, location, facebook_account_name=None, facebook_account_email=None):
-    """
-    Helper function to start tracking an upload with Facebook account info
-    Call this when the bot starts uploading a listing
-    
-    Returns: upload_id that can be used to update status later
-    """
-    try:
-        if not profile_name or not profile_folder or not listing_data:
-            logger.error("Missing required parameters for upload tracking")
-            return None
-            
-        vehicle_info = {
-            'year': listing_data.get('Year'),
-            'make': listing_data.get('Make'),
-            'model': listing_data.get('Model'),
-            'price': listing_data.get('Price'),
-            'mileage': listing_data.get('Mileage'),
-            'body_style': listing_data.get('Body Style'),
-            'exterior_color': listing_data.get('Exterior Color'),
-            'interior_color': listing_data.get('Interior Color'),
-            'vehicle_condition': listing_data.get('Vehicle Condition'),
-            'fuel_type': listing_data.get('Fuel Type'),
-            'transmission': listing_data.get('Transmission'),
-            'description': listing_data.get('Description')
-        }
-        
-        upload_record = {
-            'profile_name': profile_name,
-            'profile_folder': profile_folder,
-            'facebook_account_name': facebook_account_name,
-            'facebook_account_email': facebook_account_email,
-            'listing_id': listing_data.get('id'),
-            'vehicle_info': vehicle_info,
-            'status': 'in_progress',
-            'location': location,
-            'upload_datetime': datetime.utcnow().isoformat()
-        }
-        
-        response = supabase.table('upload_history').insert(upload_record).execute()
-        
-        if response.data:
-            upload_id = response.data[0]['id']
-            logger.info(f"Started upload tracking with ID: {upload_id}")
-            return upload_id
-        
-        logger.warning("Upload tracking started but no ID returned")
-        return None
-        
-    except Exception as e:
-        logger.error(f"Error starting upload tracking: {str(e)}")
-        logger.error(traceback.format_exc())
-        return None
-
-
-def complete_upload_tracking(upload_id, success=True, marketplace_url=None, error_message=None):
-    """
-    Helper function to mark an upload as complete with error handling
-    Call this when the bot finishes uploading (success or failure)
-    """
-    try:
-        if not upload_id:
-            logger.error("No upload_id provided for completion tracking")
-            return False
-            
-        update_data = {
-            'status': 'success' if success else 'failed',
-            'completed_datetime': datetime.utcnow().isoformat(),
-            'updated_at': datetime.utcnow().isoformat()
-        }
-        
-        if marketplace_url:
-            update_data['marketplace_url'] = marketplace_url
-            
-        if error_message:
-            update_data['error_message'] = str(error_message)[:500]  # Limit error message length
-        
-        supabase.table('upload_history')\
-            .update(update_data)\
-            .eq('id', upload_id)\
-            .execute()
-        
-        logger.info(f"Completed upload tracking for ID {upload_id}: {'success' if success else 'failed'}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error completing upload tracking: {str(e)}")
-        logger.error(traceback.format_exc())
-        return False
-
-
 def test_supabase_connection():
     """Test the Supabase connection on startup with comprehensive error handling"""
     try:
@@ -291,8 +209,8 @@ def test_supabase_connection():
         try:
             response = supabase.table('listings').select('id', count='exact').execute()
             listings_count = response.count
-            print(f"✅ Connected to Supabase successfully!")
-            print(f"✅ Found {listings_count} listings in database")
+            print(f"✓ Connected to Supabase successfully!")
+            print(f"✓ Found {listings_count} listings in database")
         except Exception as e:
             logger.error(f"Failed to query listings table: {str(e)}")
             raise
@@ -301,7 +219,7 @@ def test_supabase_connection():
         try:
             response = supabase.table('profile_locations').select('id', count='exact').execute()
             profiles_count = response.count
-            print(f"✅ Found {profiles_count} profile locations in database")
+            print(f"✓ Found {profiles_count} profile locations in database")
         except Exception as e:
             logger.error(f"Failed to query profile_locations table: {str(e)}")
             raise
@@ -310,9 +228,9 @@ def test_supabase_connection():
         try:
             response = supabase.table('upload_history').select('id', count='exact').execute()
             uploads_count = response.count
-            print(f"✅ Found {uploads_count} upload records in database")
+            print(f"ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Found {uploads_count} upload records in database")
         except Exception as e:
-            print(f"ℹ️  Upload history table not found (run schema if you want tracking)")
+            print(f"ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ÃƒÂ¯Ã‚Â¸Ã‚Â  Upload history table not found (run schema if you want tracking)")
             logger.warning(f"Upload history table not accessible: {str(e)}")
         
         print("=" * 60 + "\n")
@@ -321,7 +239,7 @@ def test_supabase_connection():
         
     except Exception as e:
         print("\n" + "=" * 60)
-        print("❌ ERROR: Could not connect to Supabase!")
+        print("ÃƒÂ¢Ã‚ÂÃ…â€™ ERROR: Could not connect to Supabase!")
         print("=" * 60)
         print(f"Error: {str(e)}")
         print("\nPlease check:")
@@ -348,7 +266,7 @@ def index():
         
         try:
             # Fetch listings from Supabase
-            response = supabase.table('listings').select('*').order('id').execute()
+            response = supabase.table('listings').select('*').is_('deleted_at', 'null').order('id').execute()
             listings = []
             
             for item in response.data:
@@ -367,7 +285,10 @@ def index():
                         'Fuel Type': item['fuel_type'],
                         'Transmission': item['transmission'],
                         'Description': item['description'],
-                        'Images Path': item['images_path']
+                        'Images Path': item['images_path'],
+                        'selectedDay': item.get('selected_day', ''),
+                        'image_ids': item.get('image_ids', []),
+                        'image_folder': item.get('image_folder', '')
                     }
                     listings.append(listing)
                 except Exception as e:
@@ -530,7 +451,9 @@ def add_listing():
             'fuel_type': str(listing['Fuel Type'])[:50],
             'transmission': str(listing['Transmission'])[:50],
             'description': str(listing['Description'])[:5000],
-            'images_path': str(listing['Images Path'])[:500]
+            'images_path': str(listing['Images Path'])[:500],
+            'image_ids': listing.get('image_ids', []),
+            'image_folder': str(listing.get('image_folder', ''))[:100]
         }
         
         # Insert into Supabase
@@ -637,7 +560,9 @@ def update_listing():
             'fuel_type': str(data['Fuel Type'])[:50],
             'transmission': str(data['Transmission'])[:50],
             'description': str(data['Description'])[:5000],
-            'images_path': str(data['Images Path'])[:500]
+            'images_path': str(data['Images Path'])[:500],
+            'image_ids': data.get('image_ids', []),
+            'image_folder': str(data.get('image_folder', ''))[:100]
         }
         
         # Update in Supabase
@@ -663,7 +588,7 @@ def update_listing():
 
 @app.route('/delete_listing', methods=['POST'])
 def delete_listing():
-    """Delete a listing from Supabase with error handling"""
+    """Soft delete a listing (moves to deleted listings)"""
     try:
         data = request.json
         
@@ -695,8 +620,12 @@ def delete_listing():
                 "message": "Invalid index format"
             }), 400
         
-        # Fetch all listings to get the ID at the given index
-        response = supabase.table('listings').select('*').order('id').execute()
+        # Fetch all ACTIVE listings to get the ID at the given index
+        response = supabase.table('listings')\
+            .select('*')\
+            .is_('deleted_at', 'null')\
+            .order('id')\
+            .execute()
         
         if not response.data:
             return jsonify({
@@ -712,11 +641,17 @@ def delete_listing():
         
         listing_id = response.data[index]['id']
         
-        # Delete from Supabase
-        delete_response = supabase.table('listings').delete().eq('id', listing_id).execute()
+        # Soft delete by setting deleted_at timestamp
+        delete_response = supabase.table('listings')\
+            .update({'deleted_at': datetime.utcnow().isoformat()})\
+            .eq('id', listing_id)\
+            .execute()
         
-        logger.info(f"Successfully deleted listing ID: {listing_id}")
-        return jsonify({"status": "success"})
+        logger.info(f"Soft deleted listing ID: {listing_id}")
+        return jsonify({
+            "status": "success",
+            "message": "Listing moved to deleted listings"
+        })
         
     except Exception as e:
         logger.error(f"Error in delete_listing: {str(e)}")
@@ -726,10 +661,6 @@ def delete_listing():
             "message": f"Failed to delete listing: {str(e)}"
         }), 500
 
-
-# ============================================================================
-# UPLOAD TRACKING ROUTES
-# ============================================================================
 
 @app.route('/track_upload', methods=['POST'])
 def track_upload():
@@ -756,8 +687,6 @@ def track_upload():
         upload_record = {
             'profile_name': str(data.get('profile_name'))[:100],
             'profile_folder': str(data.get('profile_folder', ''))[:100],
-            'facebook_account_name': str(data.get('facebook_account_name', ''))[:100] if data.get('facebook_account_name') else None,
-            'facebook_account_email': str(data.get('facebook_account_email', ''))[:200] if data.get('facebook_account_email') else None,
             'listing_id': data.get('listing_id'),
             'vehicle_info': data.get('vehicle_info'),
             'status': data.get('status', 'pending'),
@@ -1011,8 +940,6 @@ def export_history():
             'Date & Time',
             'Profile Name',
             'Profile Folder',
-            'Facebook Account Name',
-            'Facebook Account Email',
             'Vehicle Year',
             'Vehicle Make',
             'Vehicle Model',
@@ -1034,8 +961,6 @@ def export_history():
                     upload.get('upload_datetime', ''),
                     upload.get('profile_name', ''),
                     upload.get('profile_folder', ''),
-                    upload.get('facebook_account_name', ''),
-                    upload.get('facebook_account_email', ''),
                     vehicle_info.get('year', ''),
                     vehicle_info.get('make', ''),
                     vehicle_info.get('model', ''),
@@ -1137,367 +1062,6 @@ def get_upload_stats():
         return jsonify({
             'status': 'error',
             'message': f'Failed to get upload stats: {str(e)}'
-        }), 500
-
-
-# ============================================================================
-# SCHEDULING ROUTES
-# ============================================================================
-
-@app.route('/schedule_post', methods=['POST'])
-def schedule_post():
-    """Schedule a post for future automatic upload"""
-    try:
-        data = request.json
-        
-        # Validate required fields
-        required_fields = ['listing_id', 'profile_folder', 'profile_name', 'scheduled_datetime']
-        missing_fields = [field for field in required_fields if not data.get(field)]
-        if missing_fields:
-            return jsonify({
-                'status': 'error',
-                'message': f'Missing required fields: {", ".join(missing_fields)}'
-            }), 400
-        
-        # Parse scheduled datetime
-        scheduled_dt = datetime.fromisoformat(data['scheduled_datetime'].replace('Z', '+00:00'))
-        
-        # Check if the scheduled time is in the future
-        if scheduled_dt <= datetime.utcnow():
-            return jsonify({
-                'status': 'error',
-                'message': 'Scheduled time must be in the future'
-            }), 400
-        
-        # Calculate next run datetime based on recurrence
-        recurrence = data.get('recurrence', 'none')
-        next_run = scheduled_dt
-        
-        # Prepare schedule record
-        schedule_record = {
-            'listing_id': data['listing_id'],
-            'profile_folder': data['profile_folder'],
-            'profile_name': data['profile_name'],
-            'facebook_account_name': data.get('facebook_account_name'),
-            'facebook_account_email': data.get('facebook_account_email'),
-            'scheduled_datetime': scheduled_dt.isoformat(),
-            'next_run_datetime': next_run.isoformat(),
-            'status': 'pending',
-            'recurrence': recurrence
-        }
-        
-        # Insert into Supabase
-        response = supabase.table('scheduled_posts').insert(schedule_record).execute()
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Post scheduled successfully',
-            'schedule_id': response.data[0]['id'] if response.data else None
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in schedule_post: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-
-@app.route('/get_scheduled_posts', methods=['GET'])
-def get_scheduled_posts():
-    """Get all scheduled posts with optional filters"""
-    try:
-        # Build query
-        query = supabase.table('scheduled_posts').select('*')
-        
-        # Apply filters
-        status_filter = request.args.get('status')
-        if status_filter:
-            query = query.eq('status', status_filter)
-        
-        profile_filter = request.args.get('profile')
-        if profile_filter:
-            query = query.eq('profile_name', profile_filter)
-        
-        listing_id_filter = request.args.get('listing_id')
-        if listing_id_filter:
-            query = query.eq('listing_id', int(listing_id_filter))
-        
-        upcoming = request.args.get('upcoming', 'false').lower() == 'true'
-        if upcoming:
-            query = query.gte('next_run_datetime', datetime.utcnow().isoformat())
-        
-        # Execute query
-        response = query.order('scheduled_datetime', desc=False).execute()
-        
-        # Enhance data with listing details
-        scheduled_posts = []
-        for post in response.data:
-            # Get listing details
-            listing_response = supabase.table('listings').select('*').eq('id', post['listing_id']).execute()
-            listing = listing_response.data[0] if listing_response.data else {}
-            
-            enhanced_post = {
-                **post,
-                'vehicle_info': {
-                    'year': listing.get('year'),
-                    'make': listing.get('make'),
-                    'model': listing.get('model'),
-                    'price': listing.get('price'),
-                    'mileage': listing.get('mileage')
-                }
-            }
-            scheduled_posts.append(enhanced_post)
-        
-        return jsonify({
-            'status': 'success',
-            'scheduled_posts': scheduled_posts,
-            'total': len(scheduled_posts)
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in get_scheduled_posts: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-
-@app.route('/update_scheduled_post', methods=['POST'])
-def update_scheduled_post():
-    """Update a scheduled post"""
-    try:
-        data = request.json
-        schedule_id = data.get('schedule_id')
-        
-        if not schedule_id:
-            return jsonify({
-                'status': 'error',
-                'message': 'schedule_id is required'
-            }), 400
-        
-        # Prepare update data
-        update_data = {}
-        
-        if 'scheduled_datetime' in data:
-            scheduled_dt = datetime.fromisoformat(data['scheduled_datetime'].replace('Z', '+00:00'))
-            update_data['scheduled_datetime'] = scheduled_dt.isoformat()
-            update_data['next_run_datetime'] = scheduled_dt.isoformat()
-        
-        if 'status' in data:
-            update_data['status'] = data['status']
-        
-        if 'recurrence' in data:
-            update_data['recurrence'] = data['recurrence']
-        
-        if not update_data:
-            return jsonify({
-                'status': 'error',
-                'message': 'No fields to update'
-            }), 400
-        
-        # Update in Supabase
-        response = supabase.table('scheduled_posts')\
-            .update(update_data)\
-            .eq('id', schedule_id)\
-            .execute()
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Scheduled post updated successfully'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in update_scheduled_post: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-
-@app.route('/delete_scheduled_post', methods=['POST'])
-def delete_scheduled_post():
-    """Delete a scheduled post"""
-    try:
-        data = request.json
-        schedule_id = data.get('schedule_id')
-        
-        if not schedule_id:
-            return jsonify({
-                'status': 'error',
-                'message': 'schedule_id is required'
-            }), 400
-        
-        # Delete from Supabase
-        supabase.table('scheduled_posts')\
-            .delete()\
-            .eq('id', schedule_id)\
-            .execute()
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Scheduled post deleted successfully'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in delete_scheduled_post: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-
-@app.route('/process_scheduled_posts', methods=['POST'])
-def process_scheduled_posts():
-    """Process scheduled posts that are due"""
-    try:
-        current_time = datetime.utcnow()
-        
-        # Get all pending scheduled posts that are due
-        response = supabase.table('scheduled_posts')\
-            .select('*')\
-            .eq('status', 'pending')\
-            .lte('next_run_datetime', current_time.isoformat())\
-            .execute()
-        
-        due_posts = response.data
-        processed_count = 0
-        
-        for post in due_posts:
-            try:
-                # Get listing details
-                listing_response = supabase.table('listings')\
-                    .select('*')\
-                    .eq('id', post['listing_id'])\
-                    .execute()
-                
-                if not listing_response.data:
-                    # Mark as failed if listing doesn't exist
-                    supabase.table('scheduled_posts')\
-                        .update({
-                            'status': 'failed',
-                            'error_message': 'Listing not found'
-                        })\
-                        .eq('id', post['id'])\
-                        .execute()
-                    continue
-                
-                # TODO: Trigger bot to post this listing
-                # For now, we'll just mark it for manual processing
-                
-                # Update schedule based on recurrence
-                if post['recurrence'] == 'daily':
-                    next_run = current_time + timedelta(days=1)
-                    supabase.table('scheduled_posts')\
-                        .update({
-                            'last_run_datetime': current_time.isoformat(),
-                            'next_run_datetime': next_run.isoformat()
-                        })\
-                        .eq('id', post['id'])\
-                        .execute()
-                elif post['recurrence'] == 'weekly':
-                    next_run = current_time + timedelta(weeks=1)
-                    supabase.table('scheduled_posts')\
-                        .update({
-                            'last_run_datetime': current_time.isoformat(),
-                            'next_run_datetime': next_run.isoformat()
-                        })\
-                        .eq('id', post['id'])\
-                        .execute()
-                elif post['recurrence'] == 'monthly':
-                    next_run = current_time + timedelta(days=30)
-                    supabase.table('scheduled_posts')\
-                        .update({
-                            'last_run_datetime': current_time.isoformat(),
-                            'next_run_datetime': next_run.isoformat()
-                        })\
-                        .eq('id', post['id'])\
-                        .execute()
-                else:
-                    # One-time schedule, mark as completed
-                    supabase.table('scheduled_posts')\
-                        .update({
-                            'status': 'completed',
-                            'last_run_datetime': current_time.isoformat()
-                        })\
-                        .eq('id', post['id'])\
-                        .execute()
-                
-                processed_count += 1
-                
-            except Exception as e:
-                # Mark this post as failed
-                supabase.table('scheduled_posts')\
-                    .update({
-                        'status': 'failed',
-                        'error_message': str(e)
-                    })\
-                    .eq('id', post['id'])\
-                    .execute()
-        
-        return jsonify({
-            'status': 'success',
-            'message': f'Processed {processed_count} scheduled posts',
-            'processed_count': processed_count
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in process_scheduled_posts: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-
-@app.route('/get_schedule_stats', methods=['GET'])
-def get_schedule_stats():
-    """Get statistics about scheduled posts"""
-    try:
-        # Get counts by status
-        response = supabase.table('scheduled_posts')\
-            .select('status', count='exact')\
-            .execute()
-        
-        stats = {
-            'pending': 0,
-            'completed': 0,
-            'failed': 0,
-            'cancelled': 0,
-            'total': len(response.data)
-        }
-        
-        for record in response.data:
-            status = record.get('status', 'pending')
-            if status in stats:
-                stats[status] += 1
-        
-        # Get upcoming posts (next 7 days)
-        upcoming_date = (datetime.utcnow() + timedelta(days=7)).isoformat()
-        upcoming_response = supabase.table('scheduled_posts')\
-            .select('id', count='exact')\
-            .eq('status', 'pending')\
-            .lte('next_run_datetime', upcoming_date)\
-            .gte('next_run_datetime', datetime.utcnow().isoformat())\
-            .execute()
-        
-        stats['upcoming_7_days'] = upcoming_response.count
-        
-        return jsonify({
-            'status': 'success',
-            'stats': stats
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in get_schedule_stats: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
         }), 500
 
 
@@ -1793,6 +1357,343 @@ def search_drive_files():
 
 
 # ============================================================================
+# GOOGLE DRIVE FOLDER MANAGEMENT ROUTES
+# ============================================================================
+
+@app.route('/get_drive_structure', methods=['GET'])
+def get_drive_structure():
+    """Get complete folder structure from Google Drive"""
+    try:
+        drive_manager = get_drive_manager()
+        drive_manager.authenticate()
+        structure = drive_manager.get_folder_structure()
+        
+        # Format the data
+        formatted_structure = {
+            'root': {
+                'id': structure['root']['id'],
+                'name': structure['root']['name'],
+                'file_count': structure['root']['file_count'],
+                'files': []
+            },
+            'folders': []
+        }
+        
+        # Format root files
+        for file in structure['root']['files']:
+            formatted_structure['root']['files'].append({
+                'id': file['id'],
+                'name': file['name'],
+                'mimeType': file.get('mimeType', ''),
+                'size': int(file.get('size', 0)),
+                'sizeFormatted': format_file_size(int(file.get('size', 0))),
+                'createdTime': file.get('createdTime', ''),
+                'webViewLink': file.get('webViewLink', ''),
+                'thumbnailLink': file.get('thumbnailLink', '')
+            })
+        
+        # Format folders and their files
+        for folder in structure['folders']:
+            formatted_files = []
+            for file in folder['files']:
+                formatted_files.append({
+                    'id': file['id'],
+                    'name': file['name'],
+                    'mimeType': file.get('mimeType', ''),
+                    'size': int(file.get('size', 0)),
+                    'sizeFormatted': format_file_size(int(file.get('size', 0))),
+                    'createdTime': file.get('createdTime', ''),
+                    'webViewLink': file.get('webViewLink', ''),
+                    'thumbnailLink': file.get('thumbnailLink', '')
+                })
+            
+            formatted_structure['folders'].append({
+                'id': folder['id'],
+                'name': folder['name'],
+                'file_count': folder['file_count'],
+                'files': formatted_files,
+                'createdTime': folder.get('createdTime', ''),
+                'modifiedTime': folder.get('modifiedTime', '')
+            })
+        
+        logger.info(f"Retrieved folder structure: {len(formatted_structure['folders'])} folders")
+        
+        return jsonify({
+            'status': 'success',
+            'structure': formatted_structure
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_drive_structure: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get folder structure: {str(e)}'
+        }), 500
+
+
+@app.route('/create_drive_folder', methods=['POST'])
+def create_drive_folder():
+    """Create a new subfolder in Google Drive"""
+    try:
+        data = request.json
+        
+        if not data or 'folder_name' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'folder_name is required'
+            }), 400
+        
+        folder_name = data['folder_name']
+        
+        if not folder_name or not folder_name.strip():
+            return jsonify({
+                'status': 'error',
+                'message': 'Folder name cannot be empty'
+            }), 400
+        
+        # Sanitize folder name
+        folder_name = folder_name.strip()[:100]
+        
+        drive_manager = get_drive_manager()
+        drive_manager.authenticate()
+        drive_manager.ensure_folder_exists()
+        
+        folder_id = drive_manager.get_or_create_subfolder(folder_name)
+        
+        logger.info(f"Created/accessed folder: {folder_name} (ID: {folder_id})")
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Folder "{folder_name}" ready',
+            'folder_id': folder_id,
+            'folder_name': folder_name
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in create_drive_folder: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to create folder: {str(e)}'
+        }), 500
+
+
+@app.route('/upload_to_drive_folder', methods=['POST'])
+def upload_to_drive_folder():
+    """Upload file to a specific folder in Google Drive"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({
+                'status': 'error',
+                'message': 'No file provided'
+            }), 400
+        
+        file = request.files['file']
+        folder_name = request.form.get('folder_name', '')
+        
+        if file.filename == '':
+            return jsonify({
+                'status': 'error',
+                'message': 'No file selected'
+            }), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({
+                'status': 'error',
+                'message': f'File type not allowed. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
+            }), 400
+        
+        # Secure the filename
+        filename = secure_filename(file.filename)
+        
+        if not filename:
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid filename'
+            }), 400
+        
+        # Save temporarily
+        temp_path = os.path.join(UPLOAD_FOLDER, filename)
+        
+        try:
+            file.save(temp_path)
+        except Exception as e:
+            logger.error(f"Failed to save temp file: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to save file: {str(e)}'
+            }), 500
+        
+        # Check file size
+        try:
+            file_size = os.path.getsize(temp_path)
+            if file_size > MAX_FILE_SIZE:
+                os.remove(temp_path)
+                return jsonify({
+                    'status': 'error',
+                    'message': f'File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB'
+                }), 400
+        except Exception as e:
+            logger.error(f"Failed to check file size: {str(e)}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to process file'
+            }), 500
+        
+        # Upload to Google Drive
+        try:
+            drive_manager = get_drive_manager()
+            drive_manager.authenticate()
+            drive_manager.ensure_folder_exists()
+            
+            result = drive_manager.upload_file(
+                file_path=temp_path,
+                subfolder_name=folder_name if folder_name else None
+            )
+            
+            logger.info(f"Successfully uploaded file to Google Drive folder: {filename}")
+            
+            # Clean up temp file
+            try:
+                os.remove(temp_path)
+            except Exception as e:
+                logger.warning(f"Failed to remove temp file: {str(e)}")
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'File uploaded successfully',
+                'file': {
+                    'id': result['id'],
+                    'name': result['name'],
+                    'size': result.get('size', 0),
+                    'mimeType': result.get('mimeType', ''),
+                    'webViewLink': result.get('webViewLink', ''),
+                    'webContentLink': result.get('webContentLink', ''),
+                    'createdTime': result.get('createdTime', ''),
+                    'folder': folder_name if folder_name else 'root'
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Failed to upload to Google Drive: {str(e)}")
+            logger.error(traceback.format_exc())
+            # Clean up temp file if it exists
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+            
+            return jsonify({
+                'status': 'error',
+                'message': f'Upload to Google Drive failed: {str(e)}'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Error in upload_to_drive_folder: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'Upload failed: {str(e)}'
+        }), 500
+
+
+@app.route('/get_files_metadata', methods=['POST'])
+def get_files_metadata():
+    """Get metadata for multiple files by their IDs"""
+    try:
+        data = request.json
+        
+        if not data or 'file_ids' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'file_ids is required'
+            }), 400
+        
+        file_ids = data['file_ids']
+        
+        if not isinstance(file_ids, list):
+            return jsonify({
+                'status': 'error',
+                'message': 'file_ids must be a list'
+            }), 400
+        
+        drive_manager = get_drive_manager()
+        drive_manager.authenticate()
+        
+        files = drive_manager.get_multiple_files_metadata(file_ids)
+        
+        # Format the data
+        formatted_files = []
+        for file in files:
+            formatted_files.append({
+                'id': file['id'],
+                'name': file['name'],
+                'mimeType': file.get('mimeType', ''),
+                'size': int(file.get('size', 0)),
+                'sizeFormatted': format_file_size(int(file.get('size', 0))),
+                'webViewLink': file.get('webViewLink', ''),
+                'thumbnailLink': file.get('thumbnailLink', '')
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'files': formatted_files
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_files_metadata: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get files metadata: {str(e)}'
+        }), 500
+
+
+@app.route('/delete_drive_folder', methods=['POST'])
+def delete_drive_folder():
+    """Delete a folder from Google Drive"""
+    try:
+        data = request.json
+        
+        if not data or 'folder_id' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'folder_id is required'
+            }), 400
+        
+        folder_id = data['folder_id']
+        
+        drive_manager = get_drive_manager()
+        drive_manager.authenticate()
+        
+        success = drive_manager.delete_folder(folder_id)
+        
+        if success:
+            logger.info(f"Deleted folder: {folder_id}")
+            return jsonify({
+                'status': 'success',
+                'message': 'Folder deleted successfully'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to delete folder'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Error in delete_drive_folder: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to delete folder: {str(e)}'
+        }), 500
+
+
+# ============================================================================
 # BOT EXECUTION ROUTE
 # ============================================================================
 
@@ -1872,7 +1773,7 @@ def run_bot():
         
         # Fetch all listings from Supabase
         try:
-            response = supabase.table('listings').select('*').order('id').execute()
+            response = supabase.table('listings').select('*').is_('deleted_at', 'null').order('id').execute()
             all_listings = response.data
         except Exception as e:
             logger.error(f"Failed to fetch listings from database: {str(e)}")
@@ -1990,6 +1891,333 @@ def run_bot():
 # ERROR HANDLERS
 # ============================================================================
 
+
+
+# ============================================================================
+# PROFILE NOTIFICATIONS ROUTES
+# ============================================================================
+
+@app.route('/check_notifications/<profile_folder>', methods=['GET'])
+def check_notifications(profile_folder):
+    """
+    Check Facebook notifications for a specific profile
+    Uses Selenium to open Chrome with the profile and check notifications
+    """
+    try:
+        logger.info(f"Checking notifications for profile: {profile_folder}")
+        
+        # Get profile path
+        user_data_dir = os.path.expandvars(r'%LOCALAPPDATA%\Google\Chrome\User Data')
+        profile_path = os.path.join(user_data_dir, profile_folder)
+        
+        if not os.path.exists(profile_path):
+            return jsonify({
+                'status': 'error',
+                'message': 'Profile not found'
+            }), 404
+        
+        # Setup Chrome options
+        options = Options()
+        options.add_argument(f"user-data-dir={user_data_dir}")
+        options.add_argument(f"profile-directory={profile_folder}")
+        options.add_argument("--headless")  # Run in background
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument('--disable-notifications')
+        
+        driver = None
+        notifications = []
+        notification_count = 0
+        
+        try:
+            # Initialize Chrome driver
+            driver = webdriver.Chrome(options=options)
+            driver.set_page_load_timeout(30)
+            
+            # Navigate to Facebook notifications
+            logger.info("Navigating to Facebook notifications...")
+            driver.get("https://www.facebook.com/notifications")
+            time.sleep(5)  # Wait for page load
+            
+            # Check if logged in
+            if "login" in driver.current_url.lower():
+                logger.warning(f"Profile {profile_folder} is not logged into Facebook")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Not logged into Facebook',
+                    'notification_count': 0,
+                    'notifications': []
+                })
+            
+            # Try to get notification count from badge
+            try:
+                notification_badge = driver.find_element(By.CSS_SELECTOR, 
+                    '[aria-label*="Notifications"] span[data-visualcompletion="css-img"]')
+                notification_count_text = notification_badge.text.strip()
+                
+                if notification_count_text.endswith('+'):
+                    notification_count = int(notification_count_text[:-1])
+                elif notification_count_text.isdigit():
+                    notification_count = int(notification_count_text)
+                else:
+                    notification_count = 0
+                    
+                logger.info(f"Found {notification_count} notifications")
+            except Exception as e:
+                logger.warning(f"Could not find notification badge: {str(e)}")
+                notification_count = 0
+            
+            # Try to get notification items (limit to first 10)
+            try:
+                notification_items = driver.find_elements(By.CSS_SELECTOR, 
+                    '[role="article"]')[:10]
+                
+                for item in notification_items:
+                    try:
+                        # Extract notification text
+                        text_element = item.find_element(By.CSS_SELECTOR, 
+                            '[dir="auto"]')
+                        notification_text = text_element.text.strip()
+                        
+                        # Check if unread
+                        is_unread = "background-color" in item.get_attribute("style")
+                        
+                        # Try to get timestamp
+                        try:
+                            time_element = item.find_element(By.CSS_SELECTOR, 
+                                'span[class*="x1"] span:last-child')
+                            time_text = time_element.text.strip()
+                        except:
+                            time_text = "Unknown time"
+                        
+                        notifications.append({
+                            'text': notification_text[:200],  # Limit length
+                            'is_unread': is_unread,
+                            'time': time_text
+                        })
+                    except Exception as e:
+                        logger.warning(f"Error parsing notification item: {str(e)}")
+                        continue
+                        
+            except Exception as e:
+                logger.warning(f"Could not extract notification details: {str(e)}")
+            
+            # Store in database
+            notification_record = {
+                'profile_folder': profile_folder,
+                'notification_count': notification_count,
+                'last_checked': datetime.utcnow().isoformat(),
+                'notifications': notifications
+            }
+            
+            # Upsert to database
+            response = supabase.table('profile_notifications')\
+                .upsert(notification_record, on_conflict='profile_folder')\
+                .execute()
+            
+            return jsonify({
+                'status': 'success',
+                'notification_count': notification_count,
+                'notifications': notifications[:5],  # Return first 5
+                'last_checked': notification_record['last_checked']
+            })
+            
+        finally:
+            if driver:
+                driver.quit()
+                
+    except Exception as e:
+        logger.error(f"Error checking notifications: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to check notifications: {str(e)}'
+        }), 500
+
+
+@app.route('/get_profile_notifications/<profile_folder>', methods=['GET'])
+def get_profile_notifications(profile_folder):
+    """Get cached notification data for a profile"""
+    try:
+        response = supabase.table('profile_notifications')\
+            .select('*')\
+            .eq('profile_folder', profile_folder)\
+            .execute()
+        
+        if response.data:
+            return jsonify({
+                'status': 'success',
+                'data': response.data[0]
+            })
+        else:
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'notification_count': 0,
+                    'last_checked': None,
+                    'notifications': []
+                }
+            })
+            
+    except Exception as e:
+        logger.error(f"Error getting profile notifications: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/get_all_notifications', methods=['GET'])
+def get_all_notifications():
+    """Get notification status for all profiles"""
+    try:
+        response = supabase.table('profile_notifications')\
+            .select('*')\
+            .order('last_checked', desc=True)\
+            .execute()
+        
+        return jsonify({
+            'status': 'success',
+            'notifications': response.data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting all notifications: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+# ============================================================================
+# DELETED LISTINGS ROUTES
+# ============================================================================
+
+@app.route('/get_deleted_listings', methods=['GET'])
+def get_deleted_listings():
+    """Get all soft-deleted listings"""
+    try:
+        # Fetch deleted listings
+        response = supabase.table('listings')\
+            .select('*')\
+            .not_.is_('deleted_at', 'null')\
+            .order('deleted_at', desc=True)\
+            .execute()
+        
+        deleted_listings = []
+        for item in response.data:
+            listing = {
+                'id': item['id'],
+                'Year': item['year'],
+                'Make': item['make'],
+                'Model': item['model'],
+                'Mileage': item['mileage'],
+                'Price': item['price'],
+                'Body Style': item['body_style'],
+                'Exterior Color': item['exterior_color'],
+                'Interior Color': item['interior_color'],
+                'Vehicle Condition': item['vehicle_condition'],
+                'Fuel Type': item['fuel_type'],
+                'Transmission': item['transmission'],
+                'Description': item['description'],
+                'Images Path': item['images_path'],
+                'deleted_at': item['deleted_at']
+            }
+            deleted_listings.append(listing)
+        
+        return jsonify({
+            'status': 'success',
+            'deleted_listings': deleted_listings,
+            'count': len(deleted_listings)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting deleted listings: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get deleted listings: {str(e)}'
+        }), 500
+
+
+@app.route('/restore_listing', methods=['POST'])
+def restore_listing():
+    """Restore a soft-deleted listing"""
+    try:
+        data = request.json
+        
+        if not data or 'id' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No listing ID provided'
+            }), 400
+        
+        listing_id = data['id']
+        
+        # Restore the listing by setting deleted_at to NULL
+        response = supabase.table('listings')\
+            .update({'deleted_at': None})\
+            .eq('id', listing_id)\
+            .execute()
+        
+        if not response.data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Listing not found or already restored'
+            }), 404
+        
+        logger.info(f"Successfully restored listing ID: {listing_id}")
+        return jsonify({
+            'status': 'success',
+            'message': 'Listing restored successfully',
+            'listing': response.data[0]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error restoring listing: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to restore listing: {str(e)}'
+        }), 500
+
+
+@app.route('/permanently_delete_listing', methods=['POST'])
+def permanently_delete_listing():
+    """Permanently delete a listing (cannot be undone)"""
+    try:
+        data = request.json
+        
+        if not data or 'id' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No listing ID provided'
+            }), 400
+        
+        listing_id = data['id']
+        
+        # Permanently delete from database
+        response = supabase.table('listings')\
+            .delete()\
+            .eq('id', listing_id)\
+            .execute()
+        
+        logger.info(f"Permanently deleted listing ID: {listing_id}")
+        return jsonify({
+            'status': 'success',
+            'message': 'Listing permanently deleted'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error permanently deleting listing: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to permanently delete listing: {str(e)}'
+        }), 500
+
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors"""
@@ -2032,7 +2260,7 @@ if __name__ == '__main__':
         if test_supabase_connection():
             print("🚀 Starting Flask application...")
             print("🌐 Open http://localhost:5000 in your browser")
-            print(f"ℹ️  Maximum profile selection: {MAX_PROFILE_SELECTION}")
+            print(f"⚙️  Maximum profile selection: {MAX_PROFILE_SELECTION}")
             print("\n")
             logger.info("Application starting successfully")
             app.run(debug=True)
