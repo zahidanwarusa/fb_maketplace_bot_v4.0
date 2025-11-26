@@ -299,7 +299,7 @@ def index():
             logger.error(f"Error reading listings from Supabase: {str(e)}")
             logger.error(traceback.format_exc())
             listings = []
-            
+            //logs to see what we have in teh listings...
         return render_template('index.html', 
                              profiles=profiles, 
                              listings=listings, 
