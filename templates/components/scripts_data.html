@@ -26,11 +26,13 @@ new Vue({
             total: 0,
             upcoming_7_days: 0
         },
+        // FIXED: Updated schedule form with correct Edge profile fields
         scheduleForm: {
             listing_id: '',
-            profile_folder: '',
+            profile_id: '',           // Changed from profile_folder
             profile_name: '',
-            facebook_account_index: '',
+            profile_path: '',         // Added
+            location: '',             // Added
             datetime: '',
             recurrence: 'none'
         },
@@ -153,5 +155,9 @@ new Vue({
         },
         allListingsSelected() {
             return this.listings.length > 0 && this.selectedListings.length === this.listings.length;
+        },
+        // Helper to get active profiles only
+        activeProfiles() {
+            return this.profiles.filter(p => p.is_active);
         }
     },

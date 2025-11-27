@@ -1,5 +1,5 @@
 """
-Schedule Component
+Schedule Component - FIXED for Edge Profiles
 Handles scheduled posts management routes
 """
 
@@ -30,9 +30,12 @@ def init_schedule_routes(app, supabase):
             if status_filter:
                 query = query.eq('status', status_filter)
             
-            profile_filter = request.args.get('profile')
+            profile_filter = request.args.get('profile_id')
             if profile_filter:
-                query = query.eq('profile_folder', profile_filter)
+                try:
+                    query = query.eq('profile_id', int(profile_filter))
+                except ValueError:
+                    pass
             
             listing_id_filter = request.args.get('listing_id')
             if listing_id_filter:
@@ -65,7 +68,7 @@ def init_schedule_routes(app, supabase):
                             'model': listing.get('model'),
                             'price': listing.get('price'),
                             'mileage': listing.get('mileage'),
-                            'description': listing.get('description', '')[:100]
+                            'description': listing.get('description', '')[:100] if listing.get('description') else ''
                         }
                     }
                     scheduled_posts.append(enhanced_post)
@@ -141,12 +144,18 @@ def init_schedule_routes(app, supabase):
 
     @app.route('/schedule_post', methods=['POST'])
     def schedule_post():
-        """Schedule a post for future automatic upload"""
+        """Schedule a post for future automatic upload - FIXED for Edge Profiles"""
         try:
             data = request.json
             
-            # Validate required fields
-            required_fields = ['listing_id', 'profile_folder', 'profile_name', 'scheduled_datetime']
+            if not data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No data provided'
+                }), 400
+            
+            # Validate required fields - Updated for Edge profiles
+            required_fields = ['listing_id', 'profile_name', 'scheduled_datetime']
             missing_fields = [field for field in required_fields if not data.get(field)]
             if missing_fields:
                 return jsonify({
@@ -164,7 +173,7 @@ def init_schedule_routes(app, supabase):
                 }), 400
             
             # Check if the scheduled time is in the future
-            if scheduled_dt <= datetime.utcnow():
+            if scheduled_dt.replace(tzinfo=None) <= datetime.utcnow():
                 return jsonify({
                     'status': 'error',
                     'message': 'Scheduled time must be in the future'
@@ -174,29 +183,36 @@ def init_schedule_routes(app, supabase):
             recurrence = data.get('recurrence', 'none')
             next_run = scheduled_dt
             
-            # Prepare schedule record
+            # Prepare schedule record - Updated for Edge profiles
             schedule_record = {
                 'listing_id': int(data['listing_id']),
-                'profile_folder': str(data['profile_folder'])[:100],
+                'profile_id': int(data.get('profile_id')) if data.get('profile_id') else None,
                 'profile_name': str(data['profile_name'])[:100],
-                'facebook_account_name': data.get('facebook_account_name'),
-                'facebook_account_email': data.get('facebook_account_email'),
+                'profile_path': str(data.get('profile_path', ''))[:500],
+                'location': str(data.get('location', ''))[:200],
                 'scheduled_datetime': scheduled_dt.isoformat(),
                 'next_run_datetime': next_run.isoformat(),
                 'status': 'pending',
-                'recurrence': recurrence
+                'recurrence': recurrence,
+                'created_at': datetime.utcnow().isoformat()
             }
             
             # Insert into Supabase
             response = supabase.table('scheduled_posts').insert(schedule_record).execute()
             
-            logger.info(f"Scheduled post created for listing {data['listing_id']}")
-            
-            return jsonify({
-                'status': 'success',
-                'message': 'Post scheduled successfully',
-                'schedule_id': response.data[0]['id'] if response.data else None
-            })
+            if response.data:
+                logger.info(f"Scheduled post created for listing {data['listing_id']} with profile {data['profile_name']}")
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Post scheduled successfully',
+                    'schedule_id': response.data[0]['id'] if response.data else None
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to create schedule record'
+                }), 500
             
         except Exception as e:
             logger.error(f"Error in schedule_post: {str(e)}")
@@ -228,7 +244,9 @@ def init_schedule_routes(app, supabase):
                 }), 400
             
             # Prepare update data
-            update_data = {}
+            update_data = {
+                'updated_at': datetime.utcnow().isoformat()
+            }
             
             if 'scheduled_datetime' in data:
                 try:
@@ -248,12 +266,6 @@ def init_schedule_routes(app, supabase):
             if 'recurrence' in data:
                 if data['recurrence'] in ['none', 'daily', 'weekly', 'monthly']:
                     update_data['recurrence'] = data['recurrence']
-            
-            if not update_data:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'No valid fields to update'
-                }), 400
             
             # Update in Supabase
             response = supabase.table('scheduled_posts')\
