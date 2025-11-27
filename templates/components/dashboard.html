@@ -1,0 +1,91 @@
+<!-- Dashboard Tab Component -->
+<div v-if="activeTab === 'dashboard'">
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon blue">
+                <i class="fas fa-list"></i>
+            </div>
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Total Listings</div>
+            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ listings.length ]]</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon green">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Selected Listings</div>
+            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ selectedListings.length ]]</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon orange">
+                <i class="fas fa-users"></i>
+            </div>
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Active Profiles</div>
+            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ selectedProfiles.length ]] / [[ maxProfileSelection ]]</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon purple">
+                <i class="fas fa-rocket"></i>
+            </div>
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Ready to Post</div>
+            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ hasSelections ? selectedListings.length : 0 ]]</div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">Quick Start</div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+            <div @click="activeTab = 'profiles'" style="padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <i class="fas fa-user-circle" style="font-size: 32px; color: white; margin-bottom: 12px;"></i>
+                <div style="color: white; font-weight: 600; margin-bottom: 4px;">Select Profiles</div>
+                <div style="color: rgba(255,255,255,0.8); font-size: 14px;">Choose profiles to post with</div>
+            </div>
+            <div @click="activeTab = 'listings'" style="padding: 20px; background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border-radius: 12px; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <i class="fas fa-list" style="font-size: 32px; color: white; margin-bottom: 12px;"></i>
+                <div style="color: white; font-weight: 600; margin-bottom: 4px;">Select Listings</div>
+                <div style="color: rgba(255,255,255,0.8); font-size: 14px;">Choose vehicles to post</div>
+            </div>
+            <div @click="activeTab = 'add-listing'" style="padding: 20px; background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%); border-radius: 12px; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <i class="fas fa-plus-circle" style="font-size: 32px; color: white; margin-bottom: 12px;"></i>
+                <div style="color: white; font-weight: 600; margin-bottom: 4px;">Add New Listing</div>
+                <div style="color: rgba(255,255,255,0.8); font-size: 14px;">Create a new vehicle listing</div>
+            </div>
+            <div @click="runBot" :style="{opacity: hasSelections ? 1 : 0.5, cursor: hasSelections ? 'pointer' : 'not-allowed'}" style="padding: 20px; background: linear-gradient(135deg, #9f7aea 0%, #805ad5 100%); border-radius: 12px; transition: transform 0.2s;" onmouseover="if(this.style.opacity==='1')this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <i class="fas fa-rocket" style="font-size: 32px; color: white; margin-bottom: 12px;"></i>
+                <div style="color: white; font-weight: 600; margin-bottom: 4px;">Launch Bot</div>
+                <div style="color: rgba(255,255,255,0.8); font-size: 14px;">Start posting to marketplace</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card" v-if="uploadHistory.length > 0">
+        <div class="card-header">
+            <div class="card-title">Recent Activity</div>
+            <button class="btn btn-secondary" @click="activeTab = 'history'">View All</button>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Profile</th>
+                        <th>Vehicle</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="upload in uploadHistory.slice(0, 5)" :key="upload.id">
+                        <td>[[ formatDate(upload.upload_datetime) ]]</td>
+                        <td>[[ upload.profile_name ]]</td>
+                        <td>[[ upload.vehicle_info.year ]] [[ upload.vehicle_info.make ]] [[ upload.vehicle_info.model ]]</td>
+                        <td><span :class="'badge badge-' + getStatusType(upload.status)">[[ upload.status ]]</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

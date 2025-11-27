@@ -1,0 +1,173 @@
+<!-- Schedule Tab Component -->
+<div v-if="activeTab === 'schedule'">
+    <!-- Stats Grid -->
+    <div class="stats-grid" style="margin-bottom: 24px;">
+        <div class="stat-card">
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Pending</div>
+            <div style="font-size: 32px; font-weight: 700; color: #ed8936;">[[ scheduleStats.pending ]]</div>
+        </div>
+        <div class="stat-card">
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Upcoming (7 days)</div>
+            <div style="font-size: 32px; font-weight: 700; color: #667eea;">[[ scheduleStats.upcoming_7_days ]]</div>
+        </div>
+        <div class="stat-card">
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Completed</div>
+            <div style="font-size: 32px; font-weight: 700; color: #48bb78;">[[ scheduleStats.completed ]]</div>
+        </div>
+        <div class="stat-card">
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Total</div>
+            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ scheduleStats.total ]]</div>
+        </div>
+    </div>
+
+    <!-- Schedule Form Card -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <div class="card-title">Schedule New Post</div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+            <div>
+                <label>Select Listing</label>
+                <select v-model="scheduleForm.listing_id" required>
+                    <option value="">Choose a listing...</option>
+                    <option v-for="(listing, index) in listings" :key="index" :value="listing.id">
+                        [[ listing.Year ]] [[ listing.Make ]] [[ listing.Model ]]
+                    </option>
+                </select>
+            </div>
+            <div>
+                <label>Select Profile</label>
+                <select v-model="scheduleForm.profile_folder" @change="onScheduleProfileChange" required>
+                    <option value="">Choose a profile...</option>
+                    <option v-for="profile in profiles" :key="profile.folder_name" :value="profile.folder_name">
+                        [[ profile.user_name ]]
+                    </option>
+                </select>
+            </div>
+            <div v-if="scheduleForm.profile_folder && selectedScheduleProfile && selectedScheduleProfile.facebook_accounts && selectedScheduleProfile.facebook_accounts.length > 0">
+                <label>Facebook Account</label>
+                <select v-model="scheduleForm.facebook_account_index">
+                    <option value="">Choose account...</option>
+                    <option v-for="(account, index) in selectedScheduleProfile.facebook_accounts" :key="index" :value="index">
+                        [[ account.name ]]
+                    </option>
+                </select>
+            </div>
+            <div>
+                <label>Schedule Date & Time</label>
+                <input type="datetime-local" v-model="scheduleForm.datetime" required>
+            </div>
+            <div>
+                <label>Recurrence</label>
+                <select v-model="scheduleForm.recurrence">
+                    <option value="none">One Time</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                </select>
+            </div>
+            <div style="display: flex; align-items: flex-end;">
+                <button @click="scheduleNewPost" class="btn btn-primary" style="width: 100%;">
+                    <i class="fas fa-calendar-plus"></i> Schedule Post
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scheduled Posts Table -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">Scheduled Posts</div>
+            <div style="display: flex; gap: 12px;">
+                <button @click="loadScheduledPosts" class="btn btn-secondary">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </div>
+
+        <div v-if="loadingSchedule" class="empty-state">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <p style="font-weight: 600; color: #4a5568;">Loading scheduled posts...</p>
+        </div>
+
+        <div v-else-if="scheduledPosts.length === 0" class="empty-state">
+            <i class="fas fa-calendar-times"></i>
+            <h3 style="font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No scheduled posts</h3>
+            <p>Schedule your first automated post above</p>
+        </div>
+
+        <div v-else class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Scheduled For</th>
+                        <th>Profile</th>
+                        <th>Facebook Account</th>
+                        <th>Vehicle</th>
+                        <th>Recurrence</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="post in scheduledPosts" :key="post.id">
+                        <td>
+                            <div style="font-weight: 600; color: #1a202c; font-size: 14px;">
+                                [[ formatDate(post.scheduled_datetime) ]]
+                            </div>
+                            <div style="color: #718096; font-size: 13px;">
+                                [[ formatTime(post.scheduled_datetime) ]]
+                            </div>
+                        </td>
+                        <td>
+                            <div style="font-weight: 600; color: #1a202c;">[[ post.profile_name ]]</div>
+                            <div style="color: #718096; font-size: 13px;">[[ post.profile_folder ]]</div>
+                        </td>
+                        <td>
+                            <div v-if="post.facebook_account_name" style="font-weight: 600; color: #1a202c;">
+                                [[ post.facebook_account_name ]]
+                            </div>
+                            <div v-if="post.facebook_account_email" style="color: #718096; font-size: 13px;">
+                                [[ post.facebook_account_email ]]
+                            </div>
+                            <div v-else style="color: #cbd5e0; font-style: italic;">Not specified</div>
+                        </td>
+                        <td>
+                            <div style="font-weight: 600; color: #1a202c;">
+                                [[ post.vehicle_info.year ]] [[ post.vehicle_info.make ]] [[ post.vehicle_info.model ]]
+                            </div>
+                            <div style="color: #718096; font-size: 13px;">
+                                $[[ post.vehicle_info.price?.toLocaleString() ]]
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge badge-info" style="text-transform: capitalize;">
+                                [[ post.recurrence ]]
+                            </span>
+                        </td>
+                        <td>
+                            <span :class="'badge badge-' + getStatusType(post.status)">
+                                [[ post.status ]]
+                            </span>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button v-if="post.status === 'pending'" 
+                                        @click="cancelScheduledPost(post.id)" 
+                                        class="btn btn-secondary" 
+                                        style="padding: 8px 12px;">
+                                    <i class="fas fa-ban"></i>
+                                </button>
+                                <button @click="deleteScheduledPost(post.id)" 
+                                        class="btn btn-danger" 
+                                        style="padding: 8px 12px;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

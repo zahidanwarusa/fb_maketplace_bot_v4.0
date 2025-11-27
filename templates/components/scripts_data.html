@@ -1,0 +1,148 @@
+<script>
+new Vue({
+    el: '#app',
+    delimiters: ['[[', ']]'],
+    data: {
+        activeTab: 'dashboard',
+        mobileMenuOpen: false,
+        profiles: {{ profiles | tojson | safe }},
+        listings: {{ listings | tojson | safe }},
+        profileLocations: {{ profile_locations | tojson | safe }},
+        selectedProfiles: [],
+        selectedListings: [],
+        maxProfileSelection: {{ max_profile_selection | default(5) }},
+        logs: '',
+        isRunning: false,
+        uploadHistory: [],
+        loadingHistory: false,
+        scheduledPosts: [],
+        loadingSchedule: false,
+        scheduleStats: {
+            pending: 0,
+            completed: 0,
+            failed: 0,
+            cancelled: 0,
+            total: 0,
+            upcoming_7_days: 0
+        },
+        scheduleForm: {
+            listing_id: '',
+            profile_folder: '',
+            profile_name: '',
+            facebook_account_index: '',
+            datetime: '',
+            recurrence: 'none'
+        },
+        selectedScheduleProfile: null,
+        selectedUpload: null,
+        currentPage: 1,
+        pageSize: 20,
+        totalRecords: 0,
+        editingListing: null,
+        editForm: {},
+        driveFiles: [],
+        loadingMedia: false,
+        mediaSearch: '',
+        driveStats: {},
+        showMediaPicker: false,
+        showUploadModal: false,
+        pickerSelected: null,
+        pickerMode: null,
+        selectedFiles: [],
+        uploading: false,
+        uploadProgress: 0,
+        dragOver: false,
+        filters: {
+            profile: '',
+            status: '',
+            dateFrom: '',
+            dateTo: ''
+        },
+        stats: {
+            success: 0,
+            failed: 0,
+            pending: 0,
+            in_progress: 0,
+            total: 0
+        },
+        dialog: {
+            show: false,
+            type: 'info',
+            title: '',
+            message: '',
+            confirmText: 'OK',
+            onConfirm: null,
+            onCancel: null
+        },
+        toast: {
+            show: false,
+            type: 'success',
+            message: ''
+        },
+        newListing: {
+            Year: '',
+            Make: '',
+            Model: '',
+            Mileage: '',
+            Price: '',
+            'Body Style': '',
+            'Exterior Color': '',
+            'Interior Color': '',
+            'Vehicle Condition': '',
+            'Fuel Type': '',
+            Transmission: '',
+            Description: '',
+            'Images Path': '',
+            'selectedDay': '',
+            image_ids: [],
+            image_folder: ''
+        },
+        days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        colorOptions: [
+            'Black', 'Blue', 'Brown', 'Gold', 'Green', 'Gray', 'Pink', 'Purple',
+            'Red', 'Silver', 'Orange', 'White', 'Yellow', 'Charcoal', 'Off white',
+            'Tan', 'Beige', 'Burgundy', 'Turquoise'
+        ],
+        makeOptions: [
+            'Acura', 'Alfa Romeo', 'Aston Martin', 'Audi', 'BMW', 'Bentley', 'Buick',
+            'Cadillac', 'Chevrolet', 'Chrysler', 'Dodge', 'Ferrari', 'Fiat', 'Ford',
+            'GMC', 'Genesis', 'Honda', 'Hyundai', 'Infiniti', 'Jaguar', 'Jeep',
+            'Kia', 'Lamborghini', 'Land Rover', 'Lexus', 'Lincoln', 'Maserati',
+            'Mazda', 'Mercedes-Benz', 'Mini', 'Mitsubishi', 'Nissan', 'Porsche',
+            'Ram', 'Subaru', 'Tesla', 'Toyota', 'Volkswagen', 'Volvo'
+        ],
+        bodyStyles: [
+            'Sedan', 'SUV', 'Coupe', 'Truck', 'Hatchback', 'Convertible',
+            'Wagon', 'Minivan', 'Small Car', 'Other'
+        ],
+        conditions: [
+            'Excellent', 'Very good', 'Good', 'Fair', 'Poor'
+        ],
+        fuelTypes: [
+            'Diesel', 'Electric', 'Gasoline', 'Flex', 'Hybrid', 
+            'Petrol', 'Plug-in hybrid', 'Other'
+        ],
+        driveStructure: {
+            root: { id: '', name: '', file_count: 0, files: [] },
+            folders: []
+        },
+        showFolderContent: {},
+        imagePickerMode: 'single',
+        selectedImages: [],
+        currentFolder: '',
+        imagePreviews: [],
+        deletedListings: [],
+        showDeletedListings: false,
+        loadingDeleted: false,
+        profileNotifications: {},
+        checkingNotifications: false,
+    },
+
+    computed: {
+        hasSelections() {
+            return this.selectedProfiles.length > 0 && this.selectedListings.length > 0;
+        },
+        allListingsSelected() {
+            return this.listings.length > 0 && this.selectedListings.length === this.listings.length;
+        }
+    },

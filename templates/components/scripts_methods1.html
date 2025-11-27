@@ -1,0 +1,224 @@
+    methods: {
+        // ========================================================================
+        // PAGE NAVIGATION METHODS
+        // ========================================================================
+        getPageTitle() {
+            const titles = {
+                'dashboard': 'Dashboard',
+                'profiles': 'Chrome Profiles',
+                'listings': 'Vehicle Listings',
+                'add-listing': 'Add New Listing',
+                'media': 'Media Library',
+                'history': 'Upload History',
+                'deleted': 'Deleted Listings',
+                'schedule': 'Schedule'
+            };
+            return titles[this.activeTab] || 'Dashboard';
+        },
+        getPageSubtitle() {
+            const subtitles = {
+                'dashboard': 'Overview of your marketplace automation',
+                'profiles': 'Manage your Chrome profiles for posting',
+                'listings': 'Manage your vehicle listings',
+                'add-listing': 'Create a new vehicle listing',
+                'media': 'Manage your media files in Google Drive',
+                'history': 'View upload history and statistics',
+                'deleted': 'Restore previously deleted listings',
+                'schedule': 'Manage scheduled posts'
+            };
+            return subtitles[this.activeTab] || '';
+        },
+
+        // ========================================================================
+        // PROFILE METHODS
+        // ========================================================================
+        isProfileSelected(profile) {
+            return this.selectedProfiles.some(p => p.folder_name === profile.folder_name);
+        },
+        onProfileCheckboxChange(event, profile) {
+            const isChecked = event.target.checked;
+            
+            if (isChecked) {
+                if (this.selectedProfiles.length >= this.maxProfileSelection) {
+                    event.preventDefault();
+                    event.target.checked = false;
+                    this.showDialog('warning', 'Selection Limit Reached', 
+                        `You can only select up to ${this.maxProfileSelection} profiles at a time.`);
+                    return false;
+                }
+                this.selectedProfiles.push(profile);
+            } else {
+                this.selectedProfiles = this.selectedProfiles.filter(p => p.folder_name !== profile.folder_name);
+            }
+        },
+        toggleFacebookAccount(profileFolderName, accountIndex) {
+            const profile = this.profiles.find(p => p.folder_name === profileFolderName);
+            if (profile && profile.facebook_accounts && profile.facebook_accounts[accountIndex]) {
+                profile.facebook_accounts[accountIndex].selected = !profile.facebook_accounts[accountIndex].selected;
+                this.$forceUpdate();
+            }
+        },
+        updateProfileLocation(folderName) {
+            axios.post('/update_profile_location', {
+                profile: folderName,
+                location: this.profileLocations[folderName]
+            })
+            .then(response => {
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Location updated!');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                this.showDialog('error', 'Error', 'Failed to update location.');
+            });
+        },
+
+        // ========================================================================
+        // DIALOG & TOAST METHODS
+        // ========================================================================
+        showDialog(type, title, message, confirmText = 'OK') {
+            return new Promise((resolve) => {
+                this.dialog = {
+                    show: true,
+                    type: type,
+                    title: title,
+                    message: message,
+                    confirmText: confirmText,
+                    onConfirm: () => {
+                        this.dialog.show = false;
+                        resolve(true);
+                    },
+                    onCancel: () => {
+                        this.dialog.show = false;
+                        resolve(false);
+                    }
+                };
+            });
+        },
+        handleDialogConfirm() {
+            if (this.dialog.onConfirm) this.dialog.onConfirm();
+        },
+        handleDialogCancel() {
+            if (this.dialog.onCancel) this.dialog.onCancel();
+        },
+        getDialogIcon(type) {
+            const icons = {
+                'success': 'fas fa-check-circle',
+                'error': 'fas fa-times-circle',
+                'warning': 'fas fa-exclamation-triangle',
+                'info': 'fas fa-info-circle',
+                'confirm': 'fas fa-question-circle'
+            };
+            return icons[type] || icons['info'];
+        },
+        showToast(type, message, duration = 3000) {
+            this.toast = { show: true, type: type, message: message };
+            setTimeout(() => { this.toast.show = false; }, duration);
+        },
+        getToastIcon(type) {
+            const icons = {
+                'success': 'fas fa-check-circle',
+                'error': 'fas fa-times-circle',
+                'warning': 'fas fa-exclamation-triangle',
+                'info': 'fas fa-info-circle'
+            };
+            return icons[type] || icons['info'];
+        },
+        getToastColor(type) {
+            const colors = {
+                'success': 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
+                'error': 'linear-gradient(135deg, #f56565 0%, #e53e3e 100%)',
+                'warning': 'linear-gradient(135deg, #ed8936 0%, #dd6b20 100%)',
+                'info': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                'confirm': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+            };
+            return colors[type] || colors['info'];
+        },
+
+        // ========================================================================
+        // LISTING METHODS
+        // ========================================================================
+        resetForm() {
+            this.newListing = {
+                Year: '', Make: '', Model: '', Mileage: '', Price: '',
+                'Body Style': '', 'Exterior Color': '', 'Interior Color': '',
+                'Vehicle Condition': '', 'Fuel Type': '', Transmission: '',
+                Description: '', 'Images Path': '', 'selectedDay': ''
+            };
+            this.showToast('info', 'Form reset');
+        },
+        addListing() {
+            axios.post('/add_listing', this.newListing)
+                .then(response => {
+                    if (response.data.status === 'success') {
+                        this.listings.push({...this.newListing});
+                        this.resetForm();
+                        this.showDialog('success', 'Success!', 'Listing added successfully!');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    this.showDialog('error', 'Error', 'Failed to add listing.');
+                });
+        },
+        editListing(index) {
+            this.editingListing = index;
+            this.editForm = JSON.parse(JSON.stringify(this.listings[index]));
+        },
+        cancelEdit() {
+            this.editingListing = null;
+            this.editForm = {};
+        },
+        updateListing() {
+            axios.post('/update_listing', this.editForm)
+                .then(response => {
+                    if (response.data.status === 'success') {
+                        this.listings[this.editingListing] = {...this.editForm};
+                        this.cancelEdit();
+                        this.showDialog('success', 'Updated!', 'Listing updated successfully!');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    this.showDialog('error', 'Error', 'Failed to update listing.');
+                });
+        },
+        async confirmDelete(index) {
+            const confirmed = await this.showDialog('confirm', 'Confirm Delete', 'Delete this listing?', 'Delete');
+            if (!confirmed) return;
+            
+            try {
+                const response = await axios.post('/delete_listing', { index: index });
+                
+                if (response.data.status === 'success') {
+                    this.listings.splice(index, 1);
+                    this.showToast('success', 'Listing moved to deleted listings');
+                    await this.loadDeletedListings();
+                } else {
+                    this.showToast('error', response.data.message || 'Failed to delete listing');
+                }
+            } catch (error) {
+                console.error('Error deleting listing:', error);
+                const errorMessage = error.response?.data?.message || 'Failed to delete listing';
+                this.showDialog('error', 'Error', errorMessage);
+            }
+        },
+        toggleAllListings(event) {
+            if (event.target.checked) {
+                this.selectedListings = this.listings.map((_, index) => index);
+            } else {
+                this.selectedListings = [];
+            }
+        },
+        loadListings() {
+            axios.get('/get_listings')
+                .then(response => {
+                    if (response.data.status === 'success') {
+                        this.listings = response.data.listings;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading listings:', error);
+                });
+        },

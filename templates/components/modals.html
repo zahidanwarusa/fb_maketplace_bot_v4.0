@@ -1,0 +1,302 @@
+<!-- Modals Component -->
+
+<!-- Toast Notification -->
+<div v-if="toast.show" class="toast">
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center;" :style="{background: getToastColor(toast.type)}">
+            <i :class="getToastIcon(toast.type)" style="color: white; font-size: 18px;"></i>
+        </div>
+        <div style="flex: 1;">
+            <p style="font-weight: 600; color: #1a202c;">[[ toast.message ]]</p>
+        </div>
+        <button @click="toast.show = false" style="color: #718096; background: none; border: none; cursor: pointer;">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Confirm Dialog Modal -->
+<div v-if="dialog.show" class="fixed inset-0 modal-overlay flex items-center justify-center z-50" @click="dialog.show = false">
+    <div class="modal-content" style="padding: 32px;" @click.stop>
+        <div style="text-align: center;">
+            <div style="width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 16px; display: flex; align-items: center; justify-content: center;" :style="{background: getToastColor(dialog.type)}">
+                <i :class="getDialogIcon(dialog.type)" style="font-size: 32px; color: white;"></i>
+            </div>
+            <h3 style="font-size: 24px; font-weight: 700; color: #1a202c; margin-bottom: 12px;">[[ dialog.title ]]</h3>
+            <p style="color: #718096; margin-bottom: 24px; font-size: 16px;">[[ dialog.message ]]</p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button v-if="dialog.type === 'confirm'" @click="handleDialogCancel" class="btn btn-secondary">
+                    Cancel
+                </button>
+                <button @click="handleDialogConfirm" :class="'btn btn-' + (dialog.type === 'error' ? 'danger' : 'primary')">
+                    [[ dialog.confirmText || 'OK' ]]
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Media Picker Modal -->
+<div v-if="showMediaPicker" class="fixed inset-0 modal-overlay flex items-center justify-center z-50" style="padding: 20px;" @click="closeMediaPicker">
+    <div class="modal-content" style="padding: 24px; max-width: 1000px; width: 100%;" @click.stop>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="font-size: 24px; font-weight: 700; color: #1a202c;">Select Media from Google Drive</h3>
+            <button @click="closeMediaPicker" style="background: none; border: none; color: #718096; cursor: pointer; font-size: 24px;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div style="margin-bottom: 20px; padding: 12px; background: #f7fafc; border-radius: 8px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+                <input type="checkbox" 
+                       v-model="imagePickerMode" 
+                       true-value="multi" 
+                       false-value="single"
+                       @change="selectedImages = []"
+                       class="custom-checkbox">
+                <span style="font-weight: 500;">Enable multi-select mode</span>
+                <span v-if="imagePickerMode === 'multi'" class="badge badge-info">
+                    [[ selectedImages.length ]] selected
+                </span>
+            </label>
+        </div>
+
+        <!-- Search -->
+        <div style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 8px;">
+                <input v-model="mediaSearch" @keyup.enter="searchDriveFiles" type="text" placeholder="Search files..." style="flex: 1;">
+                <button @click="searchDriveFiles" class="btn btn-primary">
+                    <i class="fas fa-search"></i> Search
+                </button>
+                <button v-if="mediaSearch" @click="clearMediaSearch" class="btn btn-secondary">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div v-if="loadingMedia" class="empty-state" style="padding: 40px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <p style="font-weight: 600; color: #4a5568;">Loading files...</p>
+        </div>
+
+        <!-- Files Grid -->
+        <div v-else-if="driveFiles.length > 0" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+            <div class="file-grid">
+                <div v-for="file in driveFiles" :key="file.id" 
+                     @click="selectMediaForPicker(file)"
+                     class="file-card"
+                     :class="{'selected': pickerSelected && pickerSelected.id === file.id}">
+                    <div style="aspect-ratio: 1; background: #f1f3f5; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                        <img v-if="file.thumbnailLink" :src="file.thumbnailLink" :alt="file.name" style="width: 100%; height: 100%; object-fit: cover;">
+                        <i v-else :class="getFileIcon(file.mimeType)" style="font-size: 40px; color: #cbd5e0;"></i>
+                    </div>
+                    <div style="font-size: 13px; font-weight: 600; color: #1a202c; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="file.name">[[ file.name ]]</div>
+                    <div style="font-size: 12px; color: #718096;">[[ file.sizeFormatted ]]</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else class="empty-state" style="padding: 40px;">
+            <i class="fas fa-inbox" style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;"></i>
+            <p style="color: #718096;">No files found</p>
+        </div>
+
+        <!-- Actions -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #e2e8f0; padding-top: 20px;">
+            <button @click="openFileUpload('picker')" class="btn btn-success">
+                <i class="fas fa-upload"></i> Upload New File
+            </button>
+            <div style="display: flex; gap: 12px;">
+                <button @click="closeMediaPicker" class="btn btn-secondary">
+                    Cancel
+                </button>
+                <button @click="confirmMediaSelection" :disabled="!pickerSelected" class="btn btn-primary">
+                    <i class="fas fa-check"></i> Select File
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- File Upload Modal -->
+<div v-if="showUploadModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50" style="padding: 20px;" @click="closeUploadModal">
+    <div class="modal-content" style="padding: 24px; max-width: 600px; width: 100%;" @click.stop>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="font-size: 24px; font-weight: 700; color: #1a202c;">Upload to Google Drive</h3>
+            <button @click="closeUploadModal" style="background: none; border: none; color: #718096; cursor: pointer; font-size: 24px;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <!-- Upload Area -->
+        <div style="margin-bottom: 20px;">
+            <div @click="$refs.fileInput.click()" 
+                 @dragover.prevent="dragOver = true"
+                 @dragleave.prevent="dragOver = false"
+                 @drop.prevent="handleFileDrop"
+                 class="upload-zone"
+                 :class="{'drag-over': dragOver}">
+                <i class="fas fa-cloud-upload-alt" style="font-size: 48px; color: #cbd5e0; margin-bottom: 16px;"></i>
+                <p style="font-weight: 600; color: #4a5568; margin-bottom: 8px;">Click to browse or drag and drop files here</p>
+                <p style="font-size: 14px; color: #718096; margin-bottom: 4px;">Max file size: 100MB</p>
+                <p style="font-size: 14px; color: #718096;">Supported: Images, Videos, ZIP</p>
+            </div>
+            <input type="file" ref="fileInput" @change="handleFileSelect" multiple class="hidden" accept="image/*,video/*,.zip" style="display: none;">
+        </div>
+
+        <!-- Upload Progress -->
+        <div v-if="uploading" style="margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 14px; color: #4a5568; font-weight: 600;">Uploading...</span>
+                <span style="font-size: 14px; color: #667eea; font-weight: 600;">[[ uploadProgress ]]%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" :style="{width: uploadProgress + '%'}"></div>
+            </div>
+        </div>
+
+        <!-- Selected Files -->
+        <div v-if="selectedFiles.length > 0 && !uploading" style="margin-bottom: 20px;">
+            <p style="font-size: 14px; font-weight: 600; color: #4a5568; margin-bottom: 12px;">Selected Files ([[ selectedFiles.length ]]):</p>
+            <div style="max-height: 200px; overflow-y: auto; border: 2px solid #e2e8f0; border-radius: 8px; padding: 8px;">
+                <div v-for="(file, index) in selectedFiles" :key="index" style="display: flex; align-items: center; justify-content: space-between; background: #f7fafc; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+                        <i class="fas fa-file" style="color: #cbd5e0; font-size: 18px;"></i>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-size: 14px; color: #1a202c; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">[[ file.name ]]</div>
+                            <div style="font-size: 12px; color: #718096;">[[ formatBytes(file.size) ]]</div>
+                        </div>
+                    </div>
+                    <button @click="removeFile(index)" style="background: none; border: none; color: #f56565; cursor: pointer; padding: 4px 8px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display: flex; justify-content: flex-end; gap: 12px;">
+            <button @click="closeUploadModal" :disabled="uploading" class="btn btn-secondary">
+                Cancel
+            </button>
+            <button @click="uploadFiles" :disabled="selectedFiles.length === 0 || uploading" class="btn btn-success">
+                <i class="fas fa-upload"></i> Upload ([[ selectedFiles.length ]])
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Listing Modal -->
+<div v-if="editingListing !== null" class="fixed inset-0 modal-overlay flex items-center justify-center z-50" style="padding: 20px;" @click="cancelEdit">
+    <div class="modal-content" style="padding: 24px; max-width: 900px; width: 100%;" @click.stop>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="font-size: 24px; font-weight: 700; color: #1a202c;">Edit Vehicle Listing</h3>
+            <button @click="cancelEdit" style="background: none; border: none; color: #718096; cursor: pointer; font-size: 24px;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form @submit.prevent="updateListing">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px;">
+                <div>
+                    <label>Year</label>
+                    <input v-model.number="editForm.Year" type="number" required>
+                </div>
+                <div>
+                    <label>Make</label>
+                    <select v-model="editForm.Make" required>
+                        <option value="">Select Make</option>
+                        <option v-for="make in makeOptions" :key="make" :value="make">[[ make ]]</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Model</label>
+                    <input v-model="editForm.Model" type="text" required>
+                </div>
+                <div>
+                    <label>Mileage</label>
+                    <input v-model.number="editForm.Mileage" type="number" required>
+                </div>
+                <div>
+                    <label>Price</label>
+                    <input v-model.number="editForm.Price" type="number" required>
+                </div>
+                <div>
+                    <label>Body Style</label>
+                    <select v-model="editForm['Body Style']" required>
+                        <option value="">Select Style</option>
+                        <option v-for="style in bodyStyles" :key="style" :value="style">[[ style ]]</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Exterior Color</label>
+                    <select v-model="editForm['Exterior Color']" required>
+                        <option value="">Select Color</option>
+                        <option v-for="color in colorOptions" :key="color" :value="color">[[ color ]]</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Interior Color</label>
+                    <select v-model="editForm['Interior Color']" required>
+                        <option value="">Select Color</option>
+                        <option v-for="color in colorOptions" :key="color" :value="color">[[ color ]]</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Condition</label>
+                    <select v-model="editForm['Vehicle Condition']" required>
+                        <option value="">Select Condition</option>
+                        <option v-for="condition in conditions" :key="condition" :value="condition">[[ condition ]]</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Fuel Type</label>
+                    <select v-model="editForm['Fuel Type']" required>
+                        <option value="">Select Fuel</option>
+                        <option v-for="fuel in fuelTypes" :key="fuel" :value="fuel">[[ fuel ]]</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Transmission</label>
+                    <select v-model="editForm.Transmission" required>
+                        <option value="">Select Transmission</option>
+                        <option value="Manual transmission">Manual</option>
+                        <option value="Automatic transmission">Automatic</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Images Path</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input v-model="editForm['Images Path']" type="text" required style="flex: 1;">
+                        <button type="button" @click="openMediaPicker('edit')" class="btn btn-primary" style="padding: 10px 16px;">
+                            <i class="fas fa-folder-open"></i>
+                        </button>
+                        <button type="button" @click="openFileUpload('edit')" class="btn btn-success" style="padding: 10px 16px;">
+                            <i class="fas fa-upload"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label>Description</label>
+                <textarea v-model="editForm.Description" rows="4" required></textarea>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label>Selected Day</label>
+                <select v-model="editForm.selectedDay">
+                    <option value="">Select Day</option>
+                    <option v-for="day in days" :key="day" :value="day">[[ day ]]</option>
+                </select>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                <button type="button" @click="cancelEdit" class="btn btn-secondary">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

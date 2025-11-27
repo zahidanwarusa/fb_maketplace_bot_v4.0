@@ -1,0 +1,67 @@
+<!-- Listings Tab Component -->
+<div v-if="activeTab === 'listings'">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">Vehicle Listings</div>
+            <div style="display: flex; gap: 12px;">
+                <span class="badge badge-info">[[ listings.length ]] Total</span>
+                <span class="badge badge-success">[[ selectedListings.length ]] Selected</span>
+            </div>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" 
+                                   @change="toggleAllListings"
+                                   :checked="allListingsSelected"
+                                   class="custom-checkbox">
+                        </th>
+                        <th>Vehicle</th>
+                        <th>Details</th>
+                        <th>Price</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(listing, index) in listings" :key="index">
+                        <td>
+                            <input type="checkbox" v-model="selectedListings" :value="listing.id" class="custom-checkbox">
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fas fa-car" style="color: white; font-size: 20px;"></i>
+                                </div>
+                                <div>
+                                    <div style="font-weight: 600; color: #1a202c;">[[ listing.Year ]] [[ listing.Make ]]</div>
+                                    <div style="color: #718096; font-size: 14px;">[[ listing.Model ]]</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div style="color: #4a5568;">[[ listing['Body Style'] ]]</div>
+                            <div style="color: #718096; font-size: 13px;">[[ listing['Exterior Color'] ]] • [[ listing.Mileage?.toLocaleString() ]] mi</div>
+                        </td>
+                        <td>
+                            <div style="font-size: 18px; font-weight: 700; color: #1a202c;">
+                                $[[ listing.Price?.toLocaleString() ]]
+                            </div>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button @click="editListing(listing.id)" class="btn btn-secondary" style="padding: 8px 12px;">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button @click="confirmDelete(listing.id)" class="btn btn-danger" style="padding: 8px 12px;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,109 @@
+<!-- Profiles Tab Component -->
+<div v-if="activeTab === 'profiles'">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">Chrome Profiles</div>
+            <div style="display: flex; gap: 12px;">
+                <span class="badge badge-info">[[ profiles.length ]] Total</span>
+                <span :class="selectedProfiles.length >= maxProfileSelection ? 'badge badge-error' : 'badge badge-success'">
+                    [[ selectedProfiles.length ]] / [[ maxProfileSelection ]] Selected
+                </span>
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px;">
+            <div v-for="profile in profiles" :key="profile.folder_name" 
+                 class="profile-card"
+                 :class="{'selected': selectedProfiles.some(p => p.folder_name === profile.folder_name)}">
+                <div style="display: flex; align-items: start; gap: 12px;">
+                    <input type="checkbox" 
+                           :value="profile"
+                           :checked="selectedProfiles.some(p => p.folder_name === profile.folder_name)"
+                           @change="onProfileCheckboxChange($event, profile)"
+                           class="custom-checkbox"
+                           style="margin-top: 4px;">
+                    <div style="flex: 1;">
+                        <!-- Profile Name -->
+                        <div style="font-weight: 600; color: #1a202c; margin-bottom: 4px; font-size: 16px;">
+                            [[ profile.user_name ]]
+                        </div>
+                        <div style="color: #718096; font-size: 13px; margin-bottom: 12px;">
+                            [[ profile.folder_name ]]
+                        </div>
+                        
+                        <!-- Facebook Accounts Section -->
+                        <div v-if="profile.facebook_accounts && profile.facebook_accounts.length > 0" 
+                             style="background: #f7fafc; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #667eea;">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                                <i class="fab fa-facebook" style="color: #1877f2; font-size: 16px;"></i>
+                                <span style="font-weight: 600; font-size: 13px; color: #4a5568;">Facebook Accounts</span>
+                            </div>
+                            <div v-for="(account, index) in profile.facebook_accounts" :key="index" 
+                                 style="display: flex; align-items: center; gap: 8px; padding: 6px 0;">
+                                <input type="checkbox" 
+                                       :checked="account.selected"
+                                       @change="toggleFacebookAccount(profile.folder_name, index)"
+                                       class="custom-checkbox"
+                                       style="width: 16px; height: 16px;">
+                                <div style="flex: 1;">
+                                    <div style="font-size: 13px; font-weight: 500; color: #1a202c;">
+                                        [[ account.name ]]
+                                    </div>
+                                    <div style="font-size: 11px; color: #718096;">
+                                        [[ account.email || 'No email available' ]]
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- No Facebook Account -->
+                        <div v-else style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #f59e0b;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <i class="fas fa-exclamation-triangle" style="color: #f59e0b; font-size: 14px;"></i>
+                                <span style="font-size: 12px; color: #92400e; font-weight: 500;">No Facebook account logged in</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Notifications Section -->
+                        <div v-if="profile.facebook_accounts && profile.facebook_accounts.length > 0" 
+                             style="background: #eff6ff; padding: 10px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #3b82f6;">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-bell" style="color: #3b82f6;"></i>
+                                    <span style="font-size: 13px; font-weight: 600; color: #1e40af;">Notifications</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span v-if="profileNotifications[profile.folder_name]" 
+                                          :class="profileNotifications[profile.folder_name].notification_count > 0 ? 'badge badge-error' : 'badge badge-success'"
+                                          style="font-size: 11px;">
+                                        [[ profileNotifications[profile.folder_name].notification_count || 0 ]]
+                                    </span>
+                                    <button @click="checkNotifications(profile.folder_name)" 
+                                            :disabled="checkingNotifications"
+                                            class="btn btn-primary" 
+                                            style="padding: 4px 12px; font-size: 12px;">
+                                        <i :class="checkingNotifications ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'"></i>
+                                        [[ checkingNotifications ? 'Checking...' : 'Check' ]]
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="profileNotifications[profile.folder_name] && profileNotifications[profile.folder_name].last_checked" 
+                                 style="font-size: 11px; color: #64748b; margin-top: 6px;">
+                                Last checked: [[ formatDateTime(profileNotifications[profile.folder_name].last_checked) ]]
+                            </div>
+                        </div>
+                        
+                        <!-- Location Input -->
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-map-marker-alt" style="color: #667eea;"></i>
+                            <input type="text" 
+                                   v-model="profileLocations[profile.folder_name]" 
+                                   placeholder="Enter location"
+                                   @blur="updateProfileLocation(profile.folder_name)"
+                                   style="flex: 1; font-size: 14px; padding: 8px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
