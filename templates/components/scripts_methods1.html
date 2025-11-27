@@ -1,4 +1,4 @@
-    methods: {
+methods: {
         // ========================================================================
         // PAGE NAVIGATION METHODS
         // ========================================================================
@@ -296,7 +296,7 @@
         },
 
         // ========================================================================
-        // LISTING METHODS
+        // LISTING METHODS - FIXED
         // ========================================================================
         resetForm() {
             this.newListing = {
@@ -311,49 +311,114 @@
             axios.post('/add_listing', this.newListing)
                 .then(response => {
                     if (response.data.status === 'success') {
-                        this.listings.push({...this.newListing});
                         this.resetForm();
                         this.showDialog('success', 'Success!', 'Listing added successfully!');
+                        // Reload listings from server to get the new ID
+                        this.loadListings();
+                    } else {
+                        this.showDialog('error', 'Error', response.data.message || 'Failed to add listing.');
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    this.showDialog('error', 'Error', 'Failed to add listing.');
+                    const errorMsg = error.response?.data?.message || 'Failed to add listing.';
+                    this.showDialog('error', 'Error', errorMsg);
                 });
         },
-        editListing(index) {
-            this.editingListing = index;
-            this.editForm = JSON.parse(JSON.stringify(this.listings[index]));
+        
+        // FIXED: Find listing by ID instead of using ID as array index
+        editListing(listingId) {
+            console.log('Editing listing with ID:', listingId);
+            
+            // Find the listing by ID, not by using ID as index
+            const listing = this.listings.find(l => l.id === listingId);
+            
+            if (!listing) {
+                console.error('Listing not found with ID:', listingId);
+                this.showToast('error', 'Listing not found');
+                return;
+            }
+            
+            // Store the listing ID for reference
+            this.editingListing = listingId;
+            
+            // Deep copy the listing data to the edit form
+            this.editForm = JSON.parse(JSON.stringify(listing));
+            
+            console.log('Edit form populated:', this.editForm);
         },
+        
         cancelEdit() {
             this.editingListing = null;
             this.editForm = {};
         },
+        
         updateListing() {
+            // Validate that we have an ID
+            if (!this.editForm.id) {
+                this.showToast('error', 'No listing ID found');
+                return;
+            }
+            
+            console.log('Updating listing:', this.editForm);
+            
             axios.post('/update_listing', this.editForm)
                 .then(response => {
                     if (response.data.status === 'success') {
-                        this.listings[this.editingListing] = {...this.editForm};
                         this.cancelEdit();
                         this.showDialog('success', 'Updated!', 'Listing updated successfully!');
+                        // Reload listings from server to ensure data consistency
+                        this.loadListings();
+                    } else {
+                        this.showDialog('error', 'Error', response.data.message || 'Failed to update listing.');
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    this.showDialog('error', 'Error', 'Failed to update listing.');
+                    const errorMsg = error.response?.data?.message || 'Failed to update listing.';
+                    this.showDialog('error', 'Error', errorMsg);
                 });
         },
-        async confirmDelete(index) {
+        
+        // FIXED: Delete by ID with proper error handling
+        async confirmDelete(listingId) {
+            console.log('Deleting listing with ID:', listingId);
+            
+            // Validate listingId
+            if (!listingId && listingId !== 0) {
+                console.error('Invalid listing ID:', listingId);
+                this.showToast('error', 'Invalid listing ID');
+                return;
+            }
+            
             const confirmed = await this.showDialog('confirm', 'Confirm Delete', 'Delete this listing?', 'Delete');
             if (!confirmed) return;
             
             try {
-                const response = await axios.post('/delete_listing', { index: index });
+                // Send the listing ID to the backend
+                const response = await axios.post('/delete_listing', { 
+                    index: listingId 
+                }, {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log('Delete response:', response.data);
                 
                 if (response.data.status === 'success') {
-                    this.listings.splice(index, 1);
                     this.showToast('success', 'Listing moved to deleted listings');
-                    await this.loadDeletedListings();
+                    
+                    // Remove from local array by filtering out the deleted listing
+                    this.listings = this.listings.filter(l => l.id !== listingId);
+                    
+                    // Also remove from selected listings if it was selected
+                    this.selectedListings = this.selectedListings.filter(id => id !== listingId);
+                    
+                    // Reload deleted listings if on that tab
+                    if (this.activeTab === 'deleted') {
+                        this.loadDeletedListings();
+                    }
                 } else {
                     this.showToast('error', response.data.message || 'Failed to delete listing');
                 }
@@ -363,21 +428,29 @@
                 this.showDialog('error', 'Error', errorMessage);
             }
         },
+        
         toggleAllListings(event) {
             if (event.target.checked) {
-                this.selectedListings = this.listings.map((_, index) => index);
+                // Select all listing IDs
+                this.selectedListings = this.listings.map(listing => listing.id);
             } else {
                 this.selectedListings = [];
             }
         },
+        
         loadListings() {
             axios.get('/get_listings')
                 .then(response => {
                     if (response.data.status === 'success') {
                         this.listings = response.data.listings;
+                        console.log(`✅ Loaded ${this.listings.length} listings`);
+                    } else {
+                        console.error('Failed to load listings:', response.data.message);
+                        this.showToast('error', 'Failed to load listings');
                     }
                 })
                 .catch(error => {
                     console.error('Error loading listings:', error);
+                    this.showToast('error', 'Failed to load listings');
                 });
         },
