@@ -1,0 +1,286 @@
+        // ========================================================================
+        // MEDIA PICKER & UPLOAD METHODS
+        // ========================================================================
+        openMediaPicker(mode) {
+            this.pickerMode = mode;
+            this.showMediaPicker = true;
+            this.pickerSelected = null;
+            if (this.driveFiles.length === 0) {
+                this.loadDriveFiles();
+            }
+        },
+        closeMediaPicker() {
+            this.showMediaPicker = false;
+            this.pickerSelected = null;
+            this.mediaSearch = '';
+        },
+        selectMediaForPicker(file) {
+            this.pickerSelected = file;
+        },
+        confirmMediaSelection() {
+            if (!this.pickerSelected) return;
+            
+            const filePath = this.pickerSelected.webViewLink || `https://drive.google.com/uc?id=${this.pickerSelected.id}`;
+            
+            if (this.pickerMode === 'new') {
+                this.newListing['Images Path'] = filePath;
+            } else if (this.pickerMode === 'edit') {
+                this.editForm['Images Path'] = filePath;
+            }
+            
+            this.closeMediaPicker();
+            this.showToast('success', 'Media file selected!');
+        },
+        searchDriveFiles() {
+            if (!this.mediaSearch.trim()) {
+                this.loadDriveFiles();
+                return;
+            }
+            this.loadingMedia = true;
+            axios.get('/search_drive_files', { params: { q: this.mediaSearch } })
+            .then(response => {
+                if (response.data.status === 'success') {
+                    this.driveFiles = response.data.files;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                this.showToast('error', 'Search failed');
+            })
+            .finally(() => {
+                this.loadingMedia = false;
+            });
+        },
+        clearMediaSearch() {
+            this.mediaSearch = '';
+            this.loadDriveFiles();
+        },
+        openFileUpload(mode) {
+            this.currentFolder = '';
+            this.pickerMode = mode;
+            this.showUploadModal = true;
+            this.selectedFiles = [];
+            this.uploadProgress = 0;
+        },
+        closeUploadModal() {
+            if (!this.uploading) {
+                this.showUploadModal = false;
+                this.selectedFiles = [];
+                this.uploadProgress = 0;
+                this.currentFolder = '';
+            }
+        },
+        handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            this.selectedFiles = [...this.selectedFiles, ...files];
+        },
+        handleFileDrop(event) {
+            this.dragOver = false;
+            const files = Array.from(event.dataTransfer.files);
+            this.selectedFiles = [...this.selectedFiles, ...files];
+        },
+        removeFile(index) {
+            this.selectedFiles.splice(index, 1);
+        },
+        uploadFiles() {
+            if (this.selectedFiles.length === 0) {
+                this.showToast('warning', 'No files selected');
+                return;
+            }
+            
+            this.uploading = true;
+            this.uploadProgress = 0;
+            
+            const totalFiles = this.selectedFiles.length;
+            let uploadedCount = 0;
+            let lastUploadedFile = null;
+            
+            const uploadNext = (index) => {
+                if (index >= this.selectedFiles.length) {
+                    this.uploading = false;
+                    this.uploadProgress = 100;
+                    
+                    this.showDialog('success', 'Upload Complete', `Successfully uploaded ${uploadedCount} of ${totalFiles} file(s)!`);
+                    
+                    if (lastUploadedFile && (this.pickerMode === 'new' || this.pickerMode === 'edit' || this.pickerMode === 'picker')) {
+                        const filePath = lastUploadedFile.webViewLink || `https://drive.google.com/uc?id=${lastUploadedFile.id}`;
+                        
+                        if (this.pickerMode === 'new') {
+                            this.newListing['Images Path'] = filePath;
+                            this.showToast('success', 'Path set to uploaded file!');
+                        } else if (this.pickerMode === 'edit') {
+                            this.editForm['Images Path'] = filePath;
+                            this.showToast('success', 'Path set to uploaded file!');
+                        } else if (this.pickerMode === 'picker') {
+                            this.pickerSelected = lastUploadedFile;
+                            this.confirmMediaSelection();
+                        }
+                    }
+                    
+                    this.closeUploadModal();
+                    if (this.activeTab === 'media') {
+                        this.loadDriveStructure();
+                    } else {
+                        this.loadDriveFiles();
+                    }
+                    return;
+                }
+                
+                const file = this.selectedFiles[index];
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                if (this.currentFolder) {
+                    formData.append('folder_name', this.currentFolder);
+                    console.log(`Uploading file ${index + 1}/${totalFiles} to folder "${this.currentFolder}": ${file.name}`);
+                } else {
+                    console.log(`Uploading file ${index + 1}/${totalFiles}: ${file.name}`);
+                }
+                
+                axios.post('/upload_to_drive', formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    },
+                    timeout: 120000
+                })
+                .then(response => {
+                    console.log('Upload response:', response.data);
+                    if (response.data.status === 'success') {
+                        uploadedCount++;
+                        lastUploadedFile = response.data.file;
+                        this.uploadProgress = Math.round(((index + 1) / totalFiles) * 100);
+                        this.showToast('success', `Uploaded: ${file.name}`);
+                        uploadNext(index + 1);
+                    } else {
+                        console.error('Upload failed:', response.data);
+                        this.showToast('error', `Failed: ${file.name} - ${response.data.message}`);
+                        uploadNext(index + 1);
+                    }
+                })
+                .catch(error => {
+                    console.error('Upload error:', error);
+                    const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+                    this.showToast('error', `Failed: ${file.name} - ${errorMsg}`);
+                    uploadNext(index + 1);
+                });
+            };
+            
+            uploadNext(0);
+        },
+
+        // ========================================================================
+        // SCHEDULE METHODS
+        // ========================================================================
+        loadScheduledPosts() {
+            this.loadingSchedule = true;
+            axios.get('/get_scheduled_posts')
+                .then(response => {
+                    this.scheduledPosts = response.data.scheduled_posts;
+                    this.loadScheduleStats();
+                })
+                .catch(error => {
+                    console.error('Error loading scheduled posts:', error);
+                    this.showToast('error', 'Failed to load scheduled posts');
+                })
+                .finally(() => {
+                    this.loadingSchedule = false;
+                });
+        },
+        loadScheduleStats() {
+            axios.get('/get_schedule_stats')
+                .then(response => {
+                    this.scheduleStats = response.data.stats;
+                })
+                .catch(error => {
+                    console.error('Error loading schedule stats:', error);
+                });
+        },
+        onScheduleProfileChange() {
+            this.selectedScheduleProfile = this.profiles.find(
+                p => p.folder_name === this.scheduleForm.profile_folder
+            );
+            if (this.selectedScheduleProfile) {
+                this.scheduleForm.profile_name = this.selectedScheduleProfile.user_name;
+            }
+            this.scheduleForm.facebook_account_index = '';
+        },
+        scheduleNewPost() {
+            if (!this.scheduleForm.listing_id || !this.scheduleForm.profile_folder || !this.scheduleForm.datetime) {
+                this.showToast('warning', 'Please fill in all required fields');
+                return;
+            }
+            
+            let fbAccountName = null;
+            let fbAccountEmail = null;
+            if (this.scheduleForm.facebook_account_index !== '' && this.selectedScheduleProfile) {
+                const account = this.selectedScheduleProfile.facebook_accounts[this.scheduleForm.facebook_account_index];
+                if (account) {
+                    fbAccountName = account.name;
+                    fbAccountEmail = account.email;
+                }
+            }
+            
+            const scheduleData = {
+                listing_id: this.scheduleForm.listing_id,
+                profile_folder: this.scheduleForm.profile_folder,
+                profile_name: this.scheduleForm.profile_name,
+                facebook_account_name: fbAccountName,
+                facebook_account_email: fbAccountEmail,
+                scheduled_datetime: new Date(this.scheduleForm.datetime).toISOString(),
+                recurrence: this.scheduleForm.recurrence
+            };
+            
+            axios.post('/schedule_post', scheduleData)
+                .then(response => {
+                    this.showDialog('success', 'Success!', 'Post scheduled successfully');
+                    this.loadScheduledPosts();
+                    this.scheduleForm = {
+                        listing_id: '',
+                        profile_folder: '',
+                        profile_name: '',
+                        facebook_account_index: '',
+                        datetime: '',
+                        recurrence: 'none'
+                    };
+                    this.selectedScheduleProfile = null;
+                })
+                .catch(error => {
+                    console.error('Error scheduling post:', error);
+                    this.showDialog('error', 'Error', error.response?.data?.message || 'Failed to schedule post');
+                });
+        },
+        async cancelScheduledPost(scheduleId) {
+            const confirmed = await this.showDialog('confirm', 'Cancel Schedule', 
+                'Are you sure you want to cancel this scheduled post?', 'Cancel Post');
+            if (confirmed) {
+                axios.post('/update_scheduled_post', {
+                    schedule_id: scheduleId,
+                    status: 'cancelled'
+                })
+                .then(response => {
+                    this.showToast('success', 'Scheduled post cancelled');
+                    this.loadScheduledPosts();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    this.showToast('error', 'Failed to cancel scheduled post');
+                });
+            }
+        },
+        async deleteScheduledPost(scheduleId) {
+            const confirmed = await this.showDialog('confirm', 'Delete Schedule', 
+                'Are you sure you want to delete this scheduled post?', 'Delete');
+            if (confirmed) {
+                axios.post('/delete_scheduled_post', {
+                    schedule_id: scheduleId
+                })
+                .then(response => {
+                    this.showToast('success', 'Scheduled post deleted');
+                    this.loadScheduledPosts();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    this.showToast('error', 'Failed to delete scheduled post');
+                });
+            }
+        },

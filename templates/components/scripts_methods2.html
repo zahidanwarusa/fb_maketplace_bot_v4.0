@@ -1,0 +1,212 @@
+        // ========================================================================
+        // BOT METHODS
+        // ========================================================================
+        async runBot() {
+            if (!this.hasSelections) {
+                await this.showDialog('warning', 'No Selection', 'Please select profiles and listings.');
+                return;
+            }
+            
+            const confirmed = await this.showDialog('confirm', 'Launch Bot', 
+                `Ready to post ${this.selectedListings.length} listing(s) with ${this.selectedProfiles.length} profile(s)?`, 'Launch');
+            if (!confirmed) return;
+
+            this.isRunning = true;
+            this.logs = 'Initializing bot...\n';
+            this.showToast('info', 'Bot started!');
+            
+            const listingsData = this.selectedListings.map(index => ({
+                ...this.listings[index],
+                selectedDay: this.listings[index].selectedDay
+            }));
+            
+            axios.post('/run_bot', {
+                profiles: this.selectedProfiles,
+                listings: this.selectedListings,
+                listingsData: listingsData
+            })
+            .then(response => {
+                this.logs += response.data.stdout;
+                if (response.data.stderr) {
+                    this.logs += '\nErrors:\n' + response.data.stderr;
+                }
+                this.showDialog('success', 'Complete!', 'Bot execution completed!');
+            })
+            .catch(error => {
+                const errorMsg = error.response?.data?.message || 'An error occurred';
+                this.logs += '\nError: ' + errorMsg;
+                this.showDialog('error', 'Bot Error', errorMsg);
+            })
+            .finally(() => {
+                this.isRunning = false;
+            });
+        },
+
+        // ========================================================================
+        // HISTORY METHODS
+        // ========================================================================
+        loadUploadHistory() {
+            this.loadingHistory = true;
+            axios.get('/upload_history', { params: {page: this.currentPage, page_size: this.pageSize, ...this.filters} })
+                .then(response => {
+                    this.uploadHistory = response.data.uploads;
+                    this.totalRecords = response.data.total;
+                    this.stats = response.data.stats;
+                })
+                .finally(() => {
+                    this.loadingHistory = false;
+                });
+        },
+        viewDetails(upload) {
+            this.selectedUpload = upload;
+        },
+        exportHistory() {
+            const params = new URLSearchParams(this.filters);
+            window.open(`/export_history?${params.toString()}`, '_blank');
+            this.showToast('success', 'Export started!');
+        },
+        getStatusType(status) {
+            const types = {
+                'success': 'success',
+                'failed': 'error',
+                'pending': 'warning',
+                'in_progress': 'info'
+            };
+            return types[status] || 'info';
+        },
+
+        // ========================================================================
+        // MEDIA METHODS
+        // ========================================================================
+        loadDriveFiles() {
+            console.log('Loading Google Drive files...');
+            this.loadingMedia = true;
+            axios.get('/list_drive_files')
+                .then(response => {
+                    console.log('Drive files response:', response.data);
+                    if (response.data.status === 'success') {
+                        this.driveFiles = response.data.files;
+                        console.log(`Loaded ${this.driveFiles.length} files from Google Drive`);
+                        this.loadDriveStats();
+                    } else {
+                        console.error('Failed to load files:', response.data);
+                        this.showToast('error', response.data.message || 'Failed to load files');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading files:', error);
+                    const errorMsg = error.response?.data?.message || error.message || 'Failed to load files';
+                    this.showDialog('error', 'Google Drive Error', errorMsg);
+                })
+                .finally(() => {
+                    this.loadingMedia = false;
+                });
+        },
+        loadDriveStats() {
+            axios.get('/get_drive_stats')
+                .then(response => {
+                    console.log('Drive stats:', response.data);
+                    if (response.data.status === 'success') {
+                        this.driveStats = response.data.stats;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading stats:', error);
+                });
+        },
+        viewFile(file) {
+            window.open(file.webViewLink, '_blank');
+        },
+        async confirmDeleteMedia(file) {
+            const confirmed = await this.showDialog('confirm', 'Delete File', `Delete "${file.name}"?`, 'Delete');
+            if (confirmed) {
+                axios.post('/delete_drive_file', { file_id: file.id })
+                .then(response => {
+                    if (response.data.status === 'success') {
+                        this.showToast('success', 'File deleted!');
+                        if (this.activeTab === 'media') {
+                            this.loadDriveStructure();
+                        } else {
+                            this.loadDriveFiles();
+                        }
+                    }
+                });
+            }
+        },
+        loadDriveStructure() {
+            console.log('Loading Google Drive folder structure...');
+            this.loadingMedia = true;
+            axios.get('/get_drive_structure')
+                .then(response => {
+                    if (response.data.status === 'success') {
+                        this.driveStructure = response.data.structure;
+                        console.log(`Loaded structure: ${this.driveStructure.folders.length} folders`);
+                        this.driveStructure.folders.forEach(folder => {
+                            this.$set(this.showFolderContent, folder.id, false);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading structure:', error);
+                    this.showToast('error', 'Failed to load folder structure');
+                })
+                .finally(() => {
+                    this.loadingMedia = false;
+                });
+        },
+        toggleFolder(folderId) {
+            this.$set(this.showFolderContent, folderId, !this.showFolderContent[folderId]);
+        },
+        async createFolderPrompt() {
+            const folderName = prompt('Enter folder name (e.g., 2024-Honda-Civic):');
+            if (!folderName || !folderName.trim()) {
+                return;
+            }
+            
+            try {
+                const response = await axios.post('/create_drive_folder', {
+                    folder_name: folderName.trim()
+                });
+                
+                if (response.data.status === 'success') {
+                    this.showToast('success', `Folder "${folderName}" created!`);
+                    this.loadDriveStructure();
+                }
+            } catch (error) {
+                console.error('Error creating folder:', error);
+                this.showDialog('error', 'Error', 
+                    error.response?.data?.message || 'Failed to create folder');
+            }
+        },
+        async deleteFolder(folder) {
+            const confirmed = await this.showDialog('confirm', 'Delete Folder?', 
+                `Delete "${folder.name}" and all its files?`, 'Delete');
+            if (!confirmed) return;
+            
+            try {
+                const response = await axios.post('/delete_drive_folder', {
+                    folder_id: folder.id
+                });
+                
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Folder deleted');
+                    this.loadDriveStructure();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                this.showToast('error', 'Failed to delete folder');
+            }
+        },
+        openFileUploadToFolder(folderName) {
+            this.currentFolder = folderName;
+            this.pickerMode = 'standalone';
+            this.showUploadModal = true;
+            this.selectedFiles = [];
+            this.uploadProgress = 0;
+        },
+        getFileIcon(mimeType) {
+            if (!mimeType) return 'fas fa-file';
+            if (mimeType.startsWith('image/')) return 'fas fa-file-image';
+            if (mimeType.startsWith('video/')) return 'fas fa-file-video';
+            return 'fas fa-file';
+        },
