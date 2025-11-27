@@ -5,7 +5,7 @@
         getPageTitle() {
             const titles = {
                 'dashboard': 'Dashboard',
-                'profiles': 'Chrome Profiles',
+                'profiles': 'Edge Profiles',
                 'listings': 'Vehicle Listings',
                 'add-listing': 'Add New Listing',
                 'media': 'Media Library',
@@ -18,7 +18,7 @@
         getPageSubtitle() {
             const subtitles = {
                 'dashboard': 'Overview of your marketplace automation',
-                'profiles': 'Manage your Chrome profiles for posting',
+                'profiles': 'Manage your Microsoft Edge profiles for posting',
                 'listings': 'Manage your vehicle listings',
                 'add-listing': 'Create a new vehicle listing',
                 'media': 'Manage your media files in Google Drive',
@@ -30,13 +30,194 @@
         },
 
         // ========================================================================
-        // PROFILE METHODS
+        // EDGE PROFILE METHODS
         // ========================================================================
+        loadProfiles() {
+            this.loadingProfiles = true;
+            axios.get('/get_profiles')
+                .then(response => {
+                    if (response.data.status === 'success') {
+                        this.profiles = response.data.profiles;
+                        console.log(`✅ Loaded ${this.profiles.length} Edge profiles`);
+                    } else {
+                        this.showToast('error', response.data.message || 'Failed to load profiles');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading profiles:', error);
+                    this.showToast('error', 'Failed to load profiles');
+                })
+                .finally(() => {
+                    this.loadingProfiles = false;
+                });
+        },
+        addProfile() {
+            if (!this.profileForm.profile_name || !this.profileForm.profile_path) {
+                this.showToast('warning', 'Please fill in profile name and path');
+                return;
+            }
+            
+            axios.post('/add_profile', this.profileForm)
+                .then(response => {
+                    if (response.data.status === 'success') {
+                        this.showDialog('success', 'Success!', 'Edge profile added successfully!');
+                        this.resetProfileForm();
+                        this.loadProfiles();
+                    } else {
+                        this.showDialog('error', 'Error', response.data.message || 'Failed to add profile');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error adding profile:', error);
+                    const errorMsg = error.response?.data?.message || 'Failed to add profile';
+                    this.showDialog('error', 'Error', errorMsg);
+                });
+        },
+        editProfileClick(profile) {
+            this.editingProfile = profile.id;
+            this.profileForm = {
+                id: profile.id,
+                profile_name: profile.profile_name,
+                profile_path: profile.profile_path,
+                location: profile.location || ''
+            };
+            // Scroll to top of form
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        cancelProfileEdit() {
+            this.editingProfile = null;
+            this.resetProfileForm();
+        },
+        updateProfile() {
+            if (!this.profileForm.profile_name || !this.profileForm.profile_path) {
+                this.showToast('warning', 'Please fill in profile name and path');
+                return;
+            }
+            
+            axios.post('/update_profile', this.profileForm)
+                .then(response => {
+                    if (response.data.status === 'success') {
+                        this.showDialog('success', 'Updated!', 'Profile updated successfully!');
+                        this.cancelProfileEdit();
+                        this.loadProfiles();
+                    } else {
+                        this.showDialog('error', 'Error', response.data.message || 'Failed to update profile');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating profile:', error);
+                    const errorMsg = error.response?.data?.message || 'Failed to update profile';
+                    this.showDialog('error', 'Error', errorMsg);
+                });
+        },
+        async confirmDeleteProfile(profile) {
+            const confirmed = await this.showDialog('confirm', 'Delete Profile', 
+                `Are you sure you want to delete "${profile.profile_name}"?`, 'Delete');
+            if (!confirmed) return;
+            
+            try {
+                const response = await axios.post('/delete_profile', { id: profile.id });
+                
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Profile deleted successfully');
+                    // Remove from selected if it was selected
+                    this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id);
+                    this.loadProfiles();
+                } else {
+                    this.showToast('error', response.data.message || 'Failed to delete profile');
+                }
+            } catch (error) {
+                console.error('Error deleting profile:', error);
+                const errorMsg = error.response?.data?.message || 'Failed to delete profile';
+                this.showDialog('error', 'Error', errorMsg);
+            }
+        },
+        resetProfileForm() {
+            this.profileForm = {
+                id: null,
+                profile_name: '',
+                profile_path: '',
+                location: ''
+            };
+        },
+        updateProfileLocation(profile) {
+            axios.post('/update_profile_location', {
+                id: profile.id,
+                location: profile.location
+            })
+            .then(response => {
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Location updated!');
+                } else {
+                    this.showToast('error', response.data.message || 'Failed to update location');
+                }
+            })
+            .catch(error => {
+                console.error('Error updating location:', error);
+                this.showToast('error', 'Failed to update location');
+            });
+        },
+        toggleProfileActive(profile) {
+            const newStatus = !profile.is_active;
+            axios.post('/toggle_profile_active', {
+                id: profile.id,
+                is_active: newStatus
+            })
+            .then(response => {
+                if (response.data.status === 'success') {
+                    profile.is_active = newStatus;
+                    const statusText = newStatus ? 'activated' : 'deactivated';
+                    this.showToast('success', `Profile ${statusText}!`);
+                    
+                    // Remove from selected if deactivated
+                    if (!newStatus) {
+                        this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id);
+                    }
+                } else {
+                    this.showToast('error', response.data.message || 'Failed to update status');
+                }
+            })
+            .catch(error => {
+                console.error('Error toggling profile status:', error);
+                this.showToast('error', 'Failed to update profile status');
+            });
+        },
+        validatePath() {
+            if (!this.profileForm.profile_path) {
+                this.showToast('warning', 'Please enter a path first');
+                return;
+            }
+            
+            axios.post('/validate_profile_path', { path: this.profileForm.profile_path })
+                .then(response => {
+                    if (response.data.status === 'success') {
+                        if (response.data.exists && response.data.is_directory) {
+                            this.showDialog('success', 'Valid Path', 'The profile path exists and is valid!');
+                        } else if (response.data.exists) {
+                            this.showDialog('warning', 'Not a Directory', 'The path exists but is not a directory.');
+                        } else {
+                            this.showDialog('warning', 'Path Not Found', 'The profile path does not exist on this system.');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error validating path:', error);
+                    this.showToast('error', 'Failed to validate path');
+                });
+        },
         isProfileSelected(profile) {
-            return this.selectedProfiles.some(p => p.folder_name === profile.folder_name);
+            return this.selectedProfiles.some(p => p.id === profile.id);
         },
         onProfileCheckboxChange(event, profile) {
             const isChecked = event.target.checked;
+            
+            // Don't allow selecting inactive profiles
+            if (!profile.is_active) {
+                event.preventDefault();
+                event.target.checked = false;
+                this.showToast('warning', 'Cannot select an inactive profile');
+                return false;
+            }
             
             if (isChecked) {
                 if (this.selectedProfiles.length >= this.maxProfileSelection) {
@@ -48,30 +229,8 @@
                 }
                 this.selectedProfiles.push(profile);
             } else {
-                this.selectedProfiles = this.selectedProfiles.filter(p => p.folder_name !== profile.folder_name);
+                this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id);
             }
-        },
-        toggleFacebookAccount(profileFolderName, accountIndex) {
-            const profile = this.profiles.find(p => p.folder_name === profileFolderName);
-            if (profile && profile.facebook_accounts && profile.facebook_accounts[accountIndex]) {
-                profile.facebook_accounts[accountIndex].selected = !profile.facebook_accounts[accountIndex].selected;
-                this.$forceUpdate();
-            }
-        },
-        updateProfileLocation(folderName) {
-            axios.post('/update_profile_location', {
-                profile: folderName,
-                location: this.profileLocations[folderName]
-            })
-            .then(response => {
-                if (response.data.status === 'success') {
-                    this.showToast('success', 'Location updated!');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                this.showDialog('error', 'Error', 'Failed to update location.');
-            });
         },
 
         // ========================================================================

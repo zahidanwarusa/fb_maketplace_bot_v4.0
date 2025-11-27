@@ -1,7 +1,7 @@
         // ========================================================================
         // NOTIFICATIONS METHODS
         // ========================================================================
-        async checkNotifications(profileFolder) {
+        async checkNotifications(profileId) {
             if (this.checkingNotifications) {
                 return;
             }
@@ -10,10 +10,10 @@
             this.showToast('info', 'Checking notifications...');
             
             try {
-                const response = await axios.get(`/check_notifications/${profileFolder}`);
+                const response = await axios.get(`/check_notifications/${profileId}`);
                 
                 if (response.data.status === 'success') {
-                    this.$set(this.profileNotifications, profileFolder, response.data);
+                    this.$set(this.profileNotifications, profileId, response.data);
                     
                     const count = response.data.notification_count;
                     if (count > 0) {
@@ -155,6 +155,9 @@
     },
 
     mounted() {
+        // Load Edge profiles on startup
+        this.loadProfiles();
+        
         // Load initial data
         if (this.uploadHistory.length === 0) {
             this.loadUploadHistory();

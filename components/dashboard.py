@@ -4,9 +4,6 @@ Handles the main page route and dashboard-related functionality
 """
 
 from flask import Blueprint, render_template, jsonify
-import os
-import glob
-import json
 import logging
 import traceback
 
@@ -15,78 +12,6 @@ dashboard_bp = Blueprint('dashboard', __name__)
 
 # Get logger
 logger = logging.getLogger(__name__)
-
-
-def get_chrome_profiles(supabase, get_profile_locations_dict, get_facebook_accounts_from_profile):
-    """Get all Chrome profiles from the system with Facebook account detection"""
-    try:
-        user_data_dir = os.path.expandvars(r'%LOCALAPPDATA%\Google\Chrome\User Data')
-        profiles = []
-        
-        if not os.path.exists(user_data_dir):
-            logger.warning(f"Chrome user data directory not found: {user_data_dir}")
-            return profiles
-        
-        # Read the Local State file to get profile names
-        try:
-            local_state_path = os.path.join(user_data_dir, 'Local State')
-            with open(local_state_path, 'r', encoding='utf-8') as f:
-                local_state = json.load(f)
-                profile_info = local_state.get('profile', {}).get('info_cache', {})
-        except Exception as e:
-            logger.error(f"Failed to read Chrome profiles: {str(e)}")
-            profile_info = {}
-
-        # Get all profile directories
-        try:
-            profile_dirs = glob.glob(os.path.join(user_data_dir, 'Profile *'))
-            default_profile = os.path.join(user_data_dir, 'Default')
-            if os.path.exists(default_profile):
-                profile_dirs.append(default_profile)
-        except Exception as e:
-            logger.error(f"Failed to get profile directories: {str(e)}")
-            return profiles
-
-        # Get locations from Supabase
-        profile_locations = get_profile_locations_dict(supabase)
-
-        for profile_dir in profile_dirs:
-            try:
-                if os.path.exists(profile_dir):
-                    folder_name = os.path.basename(profile_dir)
-                    profile_id = folder_name if folder_name != 'Default' else 'Default'
-                    user_name = profile_info.get(profile_id, {}).get('name', 'Unknown')
-                    
-                    # Get location for this profile from Supabase
-                    location = profile_locations.get(folder_name, '')
-                    
-                    # Detect Facebook accounts for this profile
-                    facebook_accounts = []
-                    try:
-                        facebook_accounts = get_facebook_accounts_from_profile(profile_dir)
-                        if facebook_accounts:
-                            logger.info(f"Found {len(facebook_accounts)} Facebook account(s) in {folder_name}")
-                    except Exception as e:
-                        logger.warning(f"Could not detect Facebook accounts for {folder_name}: {str(e)}")
-                    
-                    profiles.append({
-                        'folder_name': folder_name,
-                        'user_name': user_name,
-                        'path': profile_dir,
-                        'location': location,
-                        'facebook_accounts': facebook_accounts
-                    })
-            except Exception as e:
-                logger.error(f"Error processing profile directory {profile_dir}: {str(e)}")
-                continue
-
-        logger.info(f"Successfully retrieved {len(profiles)} Chrome profiles")
-        return profiles
-        
-    except Exception as e:
-        logger.error(f"Critical error in get_chrome_profiles: {str(e)}")
-        logger.error(traceback.format_exc())
-        return []
 
 
 def get_profile_locations_dict(supabase):
@@ -102,14 +27,14 @@ def get_profile_locations_dict(supabase):
         return {}
 
 
-def init_dashboard_routes(app, supabase, max_profile_selection, get_facebook_accounts_from_profile_func):
+def init_dashboard_routes(app, supabase, max_profile_selection, get_facebook_accounts_from_profile_func=None):
     """Initialize dashboard routes with app context"""
     
     @app.route('/')
     def index():
         """Main page route with error handling"""
         try:
-            profiles = get_chrome_profiles(supabase, get_profile_locations_dict, get_facebook_accounts_from_profile_func)
+            # Profile locations (legacy support)
             profile_locations = get_profile_locations_dict(supabase)
             
             try:
@@ -147,9 +72,12 @@ def init_dashboard_routes(app, supabase, max_profile_selection, get_facebook_acc
                 logger.error(f"Error reading listings from Supabase: {str(e)}")
                 logger.error(traceback.format_exc())
                 listings = []
+            
+            # Note: Profiles are now loaded via AJAX from /get_profiles endpoint
+            # This keeps the initial page load fast
                 
             return render_template('index.html', 
-                                 profiles=profiles, 
+                                 profiles=[],  # Empty - loaded via AJAX
                                  listings=listings, 
                                  profile_locations=profile_locations,
                                  max_profile_selection=max_profile_selection)

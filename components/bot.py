@@ -1,6 +1,6 @@
 """
 Bot Component
-Handles bot execution routes
+Handles bot execution routes - Updated for Edge profiles from database
 """
 
 from flask import Blueprint, request, jsonify
@@ -17,12 +17,12 @@ bot_bp = Blueprint('bot', __name__)
 logger = logging.getLogger(__name__)
 
 
-def init_bot_routes(app, supabase, max_profile_selection, get_profile_locations_dict):
+def init_bot_routes(app, supabase, max_profile_selection, get_profile_locations_dict=None):
     """Initialize bot execution routes with app context"""
     
     @app.route('/run_bot', methods=['POST'])
     def run_bot():
-        """Run the automation bot with selected profiles and listings"""
+        """Run the automation bot with selected Edge profiles and listings"""
         try:
             data = request.json
             
@@ -56,15 +56,11 @@ def init_bot_routes(app, supabase, max_profile_selection, get_profile_locations_
                     "message": f"You can only select up to {max_profile_selection} profiles at a time. Currently selected: {len(selected_profiles)}"
                 }), 400
             
-            # Get profile locations from Supabase
-            profile_locations = get_profile_locations_dict(supabase)
-            
             # Validate all profiles have locations
             profiles_without_location = []
             for profile in selected_profiles:
-                folder_name = profile.get('folder_name', '')
-                if not profile_locations.get(folder_name):
-                    profiles_without_location.append(profile.get('user_name', folder_name))
+                if not profile.get('location'):
+                    profiles_without_location.append(profile.get('profile_name', 'Unknown'))
             
             if profiles_without_location:
                 return jsonify({
@@ -73,19 +69,19 @@ def init_bot_routes(app, supabase, max_profile_selection, get_profile_locations_
                 }), 400
             
             # Save selected profiles to a temporary file with their locations
+            # Format: path|location|profile_name
             try:
                 with open('selected_profiles.txt', 'w', encoding='utf-8') as f:
                     for profile in selected_profiles:
-                        folder_name = profile.get('folder_name', '')
-                        path = profile.get('path', '')
-                        user_name = profile.get('user_name', '')
-                        location = profile.get('location', profile_locations.get(folder_name, ""))
+                        profile_name = profile.get('profile_name', '')
+                        profile_path = profile.get('profile_path', '')
+                        location = profile.get('location', '')
                         
-                        if not path or not location:
-                            logger.warning(f"Profile missing required data: {user_name}")
+                        if not profile_path or not location:
+                            logger.warning(f"Profile missing required data: {profile_name}")
                             continue
                         
-                        f.write(f"{path}|{location}|{user_name}\n")
+                        f.write(f"{profile_path}|{location}|{profile_name}\n")
             except Exception as e:
                 logger.error(f"Failed to write selected_profiles.txt: {str(e)}")
                 return jsonify({
@@ -142,7 +138,7 @@ def init_bot_routes(app, supabase, max_profile_selection, get_profile_locations_
             
             # Run the bot script
             try:
-                logger.info(f"Starting bot with {len(selected_profiles)} profiles and {len(selected_listings_data)} listings")
+                logger.info(f"Starting bot with {len(selected_profiles)} Edge profiles and {len(selected_listings_data)} listings")
                 
                 process = subprocess.Popen(
                     ['python', 'Bot.py'], 

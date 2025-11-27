@@ -1,17 +1,12 @@
 """
 Profiles Component
-Handles Chrome profile management routes including locations and notifications
+Handles Edge profile management routes (CRUD operations for profiles stored in database)
 """
 
 from flask import Blueprint, request, jsonify
 import os
 import logging
 import traceback
-import time
-
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
 from datetime import datetime
 
 # Create blueprint
@@ -24,236 +19,309 @@ logger = logging.getLogger(__name__)
 def init_profiles_routes(app, supabase):
     """Initialize profile management routes with app context"""
     
-    @app.route('/update_profile_location', methods=['POST'])
-    def update_profile_location():
-        """Update or create a profile location with error handling"""
+    @app.route('/get_profiles', methods=['GET'])
+    def get_profiles():
+        """Get all Edge profiles from database"""
+        try:
+            response = supabase.table('edge_profiles').select('*').is_('deleted_at', 'null').order('created_at', desc=True).execute()
+            
+            profiles = []
+            for item in response.data:
+                profile = {
+                    'id': item['id'],
+                    'profile_name': item['profile_name'],
+                    'profile_path': item['profile_path'],
+                    'location': item.get('location', ''),
+                    'is_active': item.get('is_active', True),
+                    'created_at': item.get('created_at'),
+                    'updated_at': item.get('updated_at')
+                }
+                profiles.append(profile)
+            
+            logger.info(f"Retrieved {len(profiles)} Edge profiles from database")
+            return jsonify({
+                'status': 'success',
+                'profiles': profiles,
+                'count': len(profiles)
+            })
+            
+        except Exception as e:
+            logger.error(f"Error getting profiles: {str(e)}")
+            logger.error(traceback.format_exc())
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to get profiles: {str(e)}'
+            }), 500
+
+    @app.route('/add_profile', methods=['POST'])
+    def add_profile():
+        """Add a new Edge profile to the database"""
         try:
             data = request.json
             
-            if not data or 'profile' not in data or 'location' not in data:
-                logger.warning("Invalid data received for profile location update")
+            if not data:
                 return jsonify({
-                    "status": "error",
-                    "message": "Invalid data. Profile and location are required."
+                    'status': 'error',
+                    'message': 'No data provided'
                 }), 400
             
-            profile_name = data['profile']
-            location = data['location']
-            
-            if not profile_name:
+            # Validate required fields
+            if not data.get('profile_name') or not data.get('profile_path'):
                 return jsonify({
-                    "status": "error",
-                    "message": "Profile name cannot be empty"
+                    'status': 'error',
+                    'message': 'Profile name and path are required'
                 }), 400
             
-            # Check if profile exists
-            try:
-                response = supabase.table('profile_locations').select('*').eq('profile_name', profile_name).execute()
-                
-                if response.data:
-                    # Update existing
-                    supabase.table('profile_locations').update({
-                        'location': location
-                    }).eq('profile_name', profile_name).execute()
-                    logger.info(f"Updated location for profile: {profile_name}")
-                else:
-                    # Insert new
-                    supabase.table('profile_locations').insert({
-                        'profile_name': profile_name,
-                        'location': location
-                    }).execute()
-                    logger.info(f"Created new location for profile: {profile_name}")
-                
-                return jsonify({"status": "success"})
-                
-            except Exception as e:
-                logger.error(f"Database error updating profile location: {str(e)}")
-                raise
+            # Check if profile name already exists
+            existing = supabase.table('edge_profiles').select('id').eq('profile_name', data['profile_name']).is_('deleted_at', 'null').execute()
+            if existing.data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'A profile with this name already exists'
+                }), 400
             
+            # Prepare profile data
+            profile_data = {
+                'profile_name': str(data['profile_name'])[:100],
+                'profile_path': str(data['profile_path'])[:500],
+                'location': str(data.get('location', ''))[:200],
+                'is_active': True,
+                'created_at': datetime.utcnow().isoformat(),
+                'updated_at': datetime.utcnow().isoformat()
+            }
+            
+            # Insert into database
+            response = supabase.table('edge_profiles').insert(profile_data).execute()
+            
+            if response.data:
+                logger.info(f"Successfully added profile: {data['profile_name']}")
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Profile added successfully',
+                    'profile': response.data[0]
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to add profile'
+                }), 500
+                
         except Exception as e:
-            logger.error(f"Error in update_profile_location: {str(e)}")
+            logger.error(f"Error adding profile: {str(e)}")
             logger.error(traceback.format_exc())
             return jsonify({
-                "status": "error",
-                "message": f"Failed to update profile location: {str(e)}"
+                'status': 'error',
+                'message': f'Failed to add profile: {str(e)}'
             }), 500
 
-    @app.route('/check_notifications/<profile_folder>', methods=['GET'])
-    def check_notifications(profile_folder):
-        """Check Facebook notifications for a specific profile"""
+    @app.route('/update_profile', methods=['POST'])
+    def update_profile():
+        """Update an existing Edge profile"""
         try:
-            logger.info(f"Checking notifications for profile: {profile_folder}")
+            data = request.json
             
-            # Get profile path
-            user_data_dir = os.path.expandvars(r'%LOCALAPPDATA%\Google\Chrome\User Data')
-            profile_path = os.path.join(user_data_dir, profile_folder)
+            if not data or 'id' not in data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Profile ID is required'
+                }), 400
             
-            if not os.path.exists(profile_path):
+            profile_id = data['id']
+            
+            # Validate required fields
+            if not data.get('profile_name') or not data.get('profile_path'):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Profile name and path are required'
+                }), 400
+            
+            # Check if another profile with same name exists
+            existing = supabase.table('edge_profiles').select('id').eq('profile_name', data['profile_name']).neq('id', profile_id).is_('deleted_at', 'null').execute()
+            if existing.data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Another profile with this name already exists'
+                }), 400
+            
+            # Prepare update data
+            update_data = {
+                'profile_name': str(data['profile_name'])[:100],
+                'profile_path': str(data['profile_path'])[:500],
+                'location': str(data.get('location', ''))[:200],
+                'updated_at': datetime.utcnow().isoformat()
+            }
+            
+            # Update in database
+            response = supabase.table('edge_profiles').update(update_data).eq('id', profile_id).execute()
+            
+            if response.data:
+                logger.info(f"Successfully updated profile ID: {profile_id}")
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Profile updated successfully',
+                    'profile': response.data[0]
+                })
+            else:
                 return jsonify({
                     'status': 'error',
                     'message': 'Profile not found'
                 }), 404
-            
-            # Setup Chrome options
-            options = Options()
-            options.add_argument(f"user-data-dir={user_data_dir}")
-            options.add_argument(f"profile-directory={profile_folder}")
-            options.add_argument("--headless")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument('--disable-notifications')
-            
-            driver = None
-            notifications = []
-            notification_count = 0
-            
-            try:
-                driver = webdriver.Chrome(options=options)
-                driver.set_page_load_timeout(30)
                 
-                logger.info("Navigating to Facebook notifications...")
-                driver.get("https://www.facebook.com/notifications")
-                time.sleep(5)
-                
-                # Check if logged in
-                if "login" in driver.current_url.lower():
-                    logger.warning(f"Profile {profile_folder} is not logged into Facebook")
-                    return jsonify({
-                        'status': 'error',
-                        'message': 'Not logged into Facebook',
-                        'notification_count': 0,
-                        'notifications': []
-                    })
-                
-                # Get notification count
-                try:
-                    notification_badge = driver.find_element(By.CSS_SELECTOR, 
-                        '[aria-label*="Notifications"] span[data-visualcompletion="css-img"]')
-                    notification_count_text = notification_badge.text.strip()
-                    
-                    if notification_count_text.endswith('+'):
-                        notification_count = int(notification_count_text[:-1])
-                    elif notification_count_text.isdigit():
-                        notification_count = int(notification_count_text)
-                    else:
-                        notification_count = 0
-                        
-                    logger.info(f"Found {notification_count} notifications")
-                except Exception as e:
-                    logger.warning(f"Could not find notification badge: {str(e)}")
-                    notification_count = 0
-                
-                # Get notification items
-                try:
-                    notification_items = driver.find_elements(By.CSS_SELECTOR, '[role="article"]')[:10]
-                    
-                    for item in notification_items:
-                        try:
-                            text_element = item.find_element(By.CSS_SELECTOR, '[dir="auto"]')
-                            notification_text = text_element.text.strip()
-                            is_unread = "background-color" in item.get_attribute("style")
-                            
-                            try:
-                                time_element = item.find_element(By.CSS_SELECTOR, 'span[class*="x1"] span:last-child')
-                                time_text = time_element.text.strip()
-                            except:
-                                time_text = "Unknown time"
-                            
-                            notifications.append({
-                                'text': notification_text[:200],
-                                'is_unread': is_unread,
-                                'time': time_text
-                            })
-                        except Exception as e:
-                            logger.warning(f"Error parsing notification item: {str(e)}")
-                            continue
-                            
-                except Exception as e:
-                    logger.warning(f"Could not extract notification details: {str(e)}")
-                
-                # Store in database
-                notification_record = {
-                    'profile_folder': profile_folder,
-                    'notification_count': notification_count,
-                    'last_checked': datetime.utcnow().isoformat(),
-                    'notifications': notifications
-                }
-                
-                try:
-                    supabase.table('profile_notifications').upsert(
-                        notification_record, 
-                        on_conflict='profile_folder'
-                    ).execute()
-                except Exception as e:
-                    logger.warning(f"Could not store notifications in database: {str(e)}")
-                
-                return jsonify({
-                    'status': 'success',
-                    'notification_count': notification_count,
-                    'notifications': notifications[:5],
-                    'last_checked': notification_record['last_checked']
-                })
-                
-            finally:
-                if driver:
-                    driver.quit()
-                    
         except Exception as e:
-            logger.error(f"Error checking notifications: {str(e)}")
+            logger.error(f"Error updating profile: {str(e)}")
             logger.error(traceback.format_exc())
             return jsonify({
                 'status': 'error',
-                'message': f'Failed to check notifications: {str(e)}'
+                'message': f'Failed to update profile: {str(e)}'
             }), 500
 
-    @app.route('/get_profile_notifications/<profile_folder>', methods=['GET'])
-    def get_profile_notifications(profile_folder):
-        """Get cached notification data for a profile"""
+    @app.route('/delete_profile', methods=['POST'])
+    def delete_profile():
+        """Soft delete an Edge profile"""
         try:
-            response = supabase.table('profile_notifications')\
-                .select('*')\
-                .eq('profile_folder', profile_folder)\
-                .execute()
+            data = request.json
+            
+            if not data or 'id' not in data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Profile ID is required'
+                }), 400
+            
+            profile_id = data['id']
+            
+            # Soft delete by setting deleted_at
+            response = supabase.table('edge_profiles').update({
+                'deleted_at': datetime.utcnow().isoformat()
+            }).eq('id', profile_id).execute()
             
             if response.data:
+                logger.info(f"Successfully deleted profile ID: {profile_id}")
                 return jsonify({
                     'status': 'success',
-                    'data': response.data[0]
+                    'message': 'Profile deleted successfully'
                 })
             else:
                 return jsonify({
-                    'status': 'success',
-                    'data': {
-                        'notification_count': 0,
-                        'last_checked': None,
-                        'notifications': []
-                    }
-                })
+                    'status': 'error',
+                    'message': 'Profile not found'
+                }), 404
                 
         except Exception as e:
-            logger.error(f"Error getting profile notifications: {str(e)}")
+            logger.error(f"Error deleting profile: {str(e)}")
+            logger.error(traceback.format_exc())
             return jsonify({
                 'status': 'error',
-                'message': str(e)
+                'message': f'Failed to delete profile: {str(e)}'
             }), 500
 
-    @app.route('/get_all_notifications', methods=['GET'])
-    def get_all_notifications():
-        """Get notification status for all profiles"""
+    @app.route('/update_profile_location', methods=['POST'])
+    def update_profile_location():
+        """Update location for a profile"""
         try:
-            response = supabase.table('profile_notifications')\
-                .select('*')\
-                .order('last_checked', desc=True)\
-                .execute()
+            data = request.json
+            
+            if not data or 'id' not in data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Profile ID is required'
+                }), 400
+            
+            profile_id = data['id']
+            location = data.get('location', '')
+            
+            # Update location
+            response = supabase.table('edge_profiles').update({
+                'location': str(location)[:200],
+                'updated_at': datetime.utcnow().isoformat()
+            }).eq('id', profile_id).execute()
+            
+            if response.data:
+                logger.info(f"Updated location for profile ID: {profile_id}")
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Location updated successfully'
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Profile not found'
+                }), 404
+                
+        except Exception as e:
+            logger.error(f"Error updating profile location: {str(e)}")
+            logger.error(traceback.format_exc())
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to update location: {str(e)}'
+            }), 500
+
+    @app.route('/toggle_profile_active', methods=['POST'])
+    def toggle_profile_active():
+        """Toggle profile active status"""
+        try:
+            data = request.json
+            
+            if not data or 'id' not in data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Profile ID is required'
+                }), 400
+            
+            profile_id = data['id']
+            is_active = data.get('is_active', True)
+            
+            response = supabase.table('edge_profiles').update({
+                'is_active': is_active,
+                'updated_at': datetime.utcnow().isoformat()
+            }).eq('id', profile_id).execute()
+            
+            if response.data:
+                status_text = 'activated' if is_active else 'deactivated'
+                logger.info(f"Profile ID {profile_id} {status_text}")
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Profile {status_text} successfully'
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Profile not found'
+                }), 404
+                
+        except Exception as e:
+            logger.error(f"Error toggling profile status: {str(e)}")
+            logger.error(traceback.format_exc())
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to toggle profile status: {str(e)}'
+            }), 500
+
+    @app.route('/validate_profile_path', methods=['POST'])
+    def validate_profile_path():
+        """Validate if a profile path exists on the system"""
+        try:
+            data = request.json
+            
+            if not data or 'path' not in data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Path is required'
+                }), 400
+            
+            path = data['path']
+            exists = os.path.exists(path)
+            is_directory = os.path.isdir(path) if exists else False
             
             return jsonify({
                 'status': 'success',
-                'notifications': response.data
+                'exists': exists,
+                'is_directory': is_directory,
+                'path': path
             })
             
         except Exception as e:
-            logger.error(f"Error getting all notifications: {str(e)}")
+            logger.error(f"Error validating path: {str(e)}")
             return jsonify({
                 'status': 'error',
-                'message': str(e)
+                'message': f'Failed to validate path: {str(e)}'
             }), 500

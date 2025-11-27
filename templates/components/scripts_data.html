@@ -5,7 +5,7 @@ new Vue({
     data: {
         activeTab: 'dashboard',
         mobileMenuOpen: false,
-        profiles: {{ profiles | tojson | safe }},
+        profiles: [],
         listings: {{ listings | tojson | safe }},
         profileLocations: {{ profile_locations | tojson | safe }},
         selectedProfiles: [],
@@ -15,6 +15,7 @@ new Vue({
         isRunning: false,
         uploadHistory: [],
         loadingHistory: false,
+        loadingProfiles: false,
         scheduledPosts: [],
         loadingSchedule: false,
         scheduleStats: {
@@ -97,6 +98,14 @@ new Vue({
             image_ids: [],
             image_folder: ''
         },
+        // Edge Profile Management
+        profileForm: {
+            id: null,
+            profile_name: '',
+            profile_path: '',
+            location: ''
+        },
+        editingProfile: null,
         days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
         colorOptions: [
             'Black', 'Blue', 'Brown', 'Gold', 'Green', 'Gray', 'Pink', 'Purple',
