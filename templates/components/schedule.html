@@ -1,188 +1,39 @@
-<!-- Schedule Tab Component - FIXED for Edge Profiles -->
+<!-- Schedule Tab Component -->
 <div v-if="activeTab === 'schedule'">
-    <!-- Stats Grid -->
     <div class="stats-grid" style="margin-bottom: 24px;">
-        <div class="stat-card">
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Pending</div>
-            <div style="font-size: 32px; font-weight: 700; color: #ed8936;">[[ scheduleStats.pending ]]</div>
-        </div>
-        <div class="stat-card">
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Upcoming (7 days)</div>
-            <div style="font-size: 32px; font-weight: 700; color: #667eea;">[[ scheduleStats.upcoming_7_days ]]</div>
-        </div>
-        <div class="stat-card">
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Completed</div>
-            <div style="font-size: 32px; font-weight: 700; color: #48bb78;">[[ scheduleStats.completed ]]</div>
-        </div>
-        <div class="stat-card">
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Total</div>
-            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ scheduleStats.total ]]</div>
-        </div>
+        <div class="stat-card"><div style="color: #718096; font-size: 14px;">Pending</div><div style="font-size: 32px; font-weight: 700; color: #ed8936;">[[ scheduleStats.pending ]]</div></div>
+        <div class="stat-card"><div style="color: #718096; font-size: 14px;">Upcoming (7 days)</div><div style="font-size: 32px; font-weight: 700; color: #667eea;">[[ scheduleStats.upcoming_7_days ]]</div></div>
+        <div class="stat-card"><div style="color: #718096; font-size: 14px;">Completed</div><div style="font-size: 32px; font-weight: 700; color: #48bb78;">[[ scheduleStats.completed ]]</div></div>
+        <div class="stat-card"><div style="color: #718096; font-size: 14px;">Total</div><div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ scheduleStats.total ]]</div></div>
     </div>
-
-    <!-- Schedule Form Card -->
     <div class="card" style="margin-bottom: 24px;">
-        <div class="card-header">
-            <div class="card-title">
-                <i class="fas fa-calendar-plus" style="color: #667eea; margin-right: 8px;"></i>
-                Schedule New Post
-            </div>
-        </div>
-        
-        <!-- Warning if no profiles -->
-        <div v-if="profiles.length === 0" style="padding: 20px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; margin-bottom: 16px;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <i class="fas fa-exclamation-triangle" style="color: #d97706; font-size: 20px;"></i>
-                <div>
-                    <div style="font-weight: 600; color: #92400e;">No Edge Profiles Found</div>
-                    <div style="font-size: 13px; color: #a16207;">Please add Edge profiles first before scheduling posts.</div>
-                </div>
-                <button @click="activeTab = 'profiles'" class="btn btn-primary" style="margin-left: auto;">
-                    <i class="fas fa-plus"></i> Add Profile
-                </button>
-            </div>
-        </div>
-
+        <div class="card-header"><div class="card-title"><i class="fas fa-calendar-plus" style="color: #667eea; margin-right: 8px;"></i>Schedule New Post</div></div>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-            <div>
-                <label>Select Listing</label>
-                <select v-model="scheduleForm.listing_id" required>
-                    <option value="">Choose a listing...</option>
-                    <option v-for="listing in listings" :key="listing.id" :value="listing.id">
-                        [[ listing.Year ]] [[ listing.Make ]] [[ listing.Model ]]
-                    </option>
-                </select>
-            </div>
-            <div>
-                <label>Select Edge Profile</label>
-                <select v-model="scheduleForm.profile_id" @change="onScheduleProfileChange" required>
-                    <option value="">Choose a profile...</option>
-                    <!-- FIXED: Using correct property names for Edge profiles -->
-                    <option v-for="profile in profiles" 
-                            :key="profile.id" 
-                            :value="profile.id"
-                            :disabled="!profile.is_active">
-                        [[ profile.profile_name ]] [[ !profile.is_active ? '(Inactive)' : '' ]]
-                    </option>
-                </select>
-                <small v-if="selectedScheduleProfile && selectedScheduleProfile.location" style="color: #718096; font-size: 12px; margin-top: 4px; display: block;">
-                    <i class="fas fa-map-marker-alt"></i> [[ selectedScheduleProfile.location ]]
-                </small>
-            </div>
-            <div>
-                <label>Schedule Date & Time</label>
-                <input type="datetime-local" v-model="scheduleForm.datetime" required>
-            </div>
-            <div>
-                <label>Recurrence</label>
-                <select v-model="scheduleForm.recurrence">
-                    <option value="none">One Time</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                </select>
-            </div>
-            <div style="display: flex; align-items: flex-end;">
-                <button @click="scheduleNewPost" 
-                        class="btn btn-primary" 
-                        style="width: 100%;"
-                        :disabled="profiles.length === 0">
-                    <i class="fas fa-calendar-plus"></i> Schedule Post
-                </button>
-            </div>
+            <div><label>Select Listing</label><select v-model="scheduleForm.listing_id" required><option value="">Choose a listing...</option><option v-for="listing in listings" :key="listing.id" :value="listing.id">[[ listing.Year ]] [[ listing.Make ]] [[ listing.Model ]]</option></select></div>
+            <div><label>Select Edge Profile</label><select v-model="scheduleForm.profile_id" @change="onScheduleProfileChange" required><option value="">Choose a profile...</option><option v-for="profile in profiles" :key="profile.id" :value="profile.id" :disabled="!profile.is_active">[[ profile.profile_name ]]</option></select></div>
+            <div><label>Schedule Date & Time</label><input type="datetime-local" v-model="scheduleForm.datetime" required></div>
+            <div><label>Recurrence</label><select v-model="scheduleForm.recurrence"><option value="none">One Time</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+            <div style="display: flex; align-items: flex-end;"><button @click="scheduleNewPost" class="btn btn-primary" style="width: 100%;"><i class="fas fa-calendar-plus"></i> Schedule Post</button></div>
         </div>
     </div>
-
-    <!-- Scheduled Posts Table -->
     <div class="card">
-        <div class="card-header">
-            <div class="card-title">Scheduled Posts</div>
-            <div style="display: flex; gap: 12px;">
-                <button @click="loadScheduledPosts" class="btn btn-secondary">
-                    <i class="fas fa-sync-alt"></i> Refresh
-                </button>
-            </div>
-        </div>
-
-        <div v-if="loadingSchedule" class="empty-state">
-            <div class="spinner" style="margin: 0 auto 20px;"></div>
-            <p style="font-weight: 600; color: #4a5568;">Loading scheduled posts...</p>
-        </div>
-
-        <div v-else-if="scheduledPosts.length === 0" class="empty-state">
-            <i class="fas fa-calendar-times" style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;"></i>
-            <h3 style="font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No scheduled posts</h3>
-            <p style="color: #718096;">Schedule your first automated post above</p>
-        </div>
-
+        <div class="card-header"><div class="card-title">Scheduled Posts</div><button @click="loadScheduledPosts" class="btn btn-secondary"><i class="fas fa-sync-alt"></i> Refresh</button></div>
+        <div v-if="loadingSchedule" class="empty-state"><div class="spinner" style="margin: 0 auto 20px;"></div><p>Loading scheduled posts...</p></div>
+        <div v-else-if="scheduledPosts.length === 0" class="empty-state"><i class="fas fa-calendar-times"></i><h3>No scheduled posts</h3></div>
         <div v-else class="table-container">
             <table>
-                <thead>
-                    <tr>
-                        <th>Scheduled For</th>
-                        <th>Profile</th>
-                        <th>Vehicle</th>
-                        <th>Recurrence</th>
-                        <th>Status</th>
-                        <th style="width: 120px;">Actions</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Scheduled For</th><th>Profile</th><th>Vehicle</th><th>Recurrence</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                     <tr v-for="post in scheduledPosts" :key="post.id">
-                        <td>
-                            <div style="font-weight: 600; color: #1a202c; font-size: 14px;">
-                                [[ formatDate(post.scheduled_datetime) ]]
-                            </div>
-                            <div style="color: #718096; font-size: 13px;">
-                                [[ formatTime(post.scheduled_datetime) ]]
-                            </div>
-                        </td>
-                        <td>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="width: 32px; height: 32px; background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%); border-radius: 6px; display: flex; align-items: center; justify-content: center;">
-                                    <i class="fab fa-edge" style="color: white; font-size: 14px;"></i>
-                                </div>
-                                <div>
-                                    <div style="font-weight: 600; color: #1a202c;">[[ post.profile_name ]]</div>
-                                    <div v-if="post.location" style="color: #718096; font-size: 12px;">
-                                        <i class="fas fa-map-marker-alt"></i> [[ post.location ]]
-                                    </div>
-                                </div>
-                            </div>
-                        </td>
-                        <td>
-                            <div style="font-weight: 600; color: #1a202c;">
-                                [[ post.vehicle_info.year ]] [[ post.vehicle_info.make ]] [[ post.vehicle_info.model ]]
-                            </div>
-                            <div style="color: #718096; font-size: 13px;">
-                                $[[ post.vehicle_info.price?.toLocaleString() ]]
-                            </div>
-                        </td>
-                        <td>
-                            <span class="badge badge-info" style="text-transform: capitalize;">
-                                [[ post.recurrence ]]
-                            </span>
-                        </td>
-                        <td>
-                            <span :class="'badge badge-' + getStatusType(post.status)">
-                                [[ post.status ]]
-                            </span>
-                        </td>
+                        <td><div style="font-weight: 600;">[[ formatDate(post.scheduled_datetime) ]]</div><div style="color: #718096; font-size: 13px;">[[ formatTime(post.scheduled_datetime) ]]</div></td>
+                        <td><div style="font-weight: 600;">[[ post.profile_name ]]</div></td>
+                        <td><div style="font-weight: 600;">[[ post.vehicle_info.year ]] [[ post.vehicle_info.make ]] [[ post.vehicle_info.model ]]</div></td>
+                        <td><span class="badge badge-info" style="text-transform: capitalize;">[[ post.recurrence ]]</span></td>
+                        <td><span :class="'badge badge-' + getStatusType(post.status)">[[ post.status ]]</span></td>
                         <td>
                             <div style="display: flex; gap: 8px;">
-                                <button v-if="post.status === 'pending'" 
-                                        @click="cancelScheduledPost(post.id)" 
-                                        class="btn btn-secondary" 
-                                        style="padding: 8px 12px;"
-                                        title="Cancel">
-                                    <i class="fas fa-ban"></i>
-                                </button>
-                                <button @click="deleteScheduledPost(post.id)" 
-                                        class="btn btn-danger" 
-                                        style="padding: 8px 12px;"
-                                        title="Delete">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                                <button v-if="post.status === 'pending'" @click="cancelScheduledPost(post.id)" class="btn btn-secondary" style="padding: 8px 12px;"><i class="fas fa-ban"></i></button>
+                                <button @click="deleteScheduledPost(post.id)" class="btn btn-danger" style="padding: 8px 12px;"><i class="fas fa-trash"></i></button>
                             </div>
                         </td>
                     </tr>

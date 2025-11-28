@@ -1,0 +1,349 @@
+<!-- Bot Activities Tab Component -->
+<div v-if="activeTab === 'bot-activities'">
+    
+    <!-- Bot Status Header Card -->
+    <div class="card" style="margin-bottom: 24px;" :style="botStatus.process_running ? 'border: 2px solid #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);' : ''">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <div :style="botStatus.process_running ? 'background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);' : 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);'" 
+                     style="width: 64px; height: 64px; border-radius: 16px; display: flex; align-items: center; justify-content: center;">
+                    <i :class="botStatus.process_running ? 'fas fa-robot fa-pulse' : 'fas fa-robot'" style="font-size: 28px; color: white;"></i>
+                </div>
+                <div>
+                    <h2 style="font-size: 24px; font-weight: 700; color: #1a202c; margin-bottom: 4px;">
+                        Bot Status: <span :style="{color: getBotStatusColor(botStatus.status)}">[[ getBotStatusText(botStatus.status) ]]</span>
+                    </h2>
+                    <p style="color: #718096; font-size: 14px;">
+                        <span v-if="botStatus.process_running">
+                            <i class="fas fa-circle" style="color: #f59e0b; font-size: 8px; margin-right: 6px; animation: pulse 1s infinite;"></i>
+                            Running since [[ formatTime(botStatus.start_time) ]]
+                        </span>
+                        <span v-else>
+                            <i class="fas fa-circle" style="color: #48bb78; font-size: 8px; margin-right: 6px;"></i>
+                            Ready to launch
+                        </span>
+                    </p>
+                </div>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button v-if="botStatus.process_running" @click="stopBot" class="btn btn-danger" :disabled="stoppingBot" style="padding: 12px 24px;">
+                    <i :class="stoppingBot ? 'fas fa-spinner fa-spin' : 'fas fa-stop-circle'"></i>
+                    [[ stoppingBot ? 'Stopping...' : 'Stop Bot' ]]
+                </button>
+                <button v-else @click="runBot" class="btn btn-success" :disabled="!hasSelections || isRunning" style="padding: 12px 24px;">
+                    <i :class="isRunning ? 'fas fa-spinner fa-spin' : 'fas fa-rocket'"></i>
+                    [[ isRunning ? 'Starting...' : 'Launch Bot' ]]
+                </button>
+                <button @click="showBotSettings = true" class="btn btn-secondary" style="padding: 12px 16px;" title="Bot Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button @click="resetBotState" class="btn btn-secondary" style="padding: 12px 16px;" title="Reset Bot State">
+                    <i class="fas fa-redo"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Progress Bar (when running) -->
+        <div v-if="botStatus.process_running" style="margin-top: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span v-if="botStatus.current_profile" style="font-size: 14px; color: #4a5568;">
+                        <i class="fab fa-edge" style="color: #0078d4; margin-right: 4px;"></i>
+                        <strong>[[ botStatus.current_profile ]]</strong>
+                    </span>
+                    <span v-if="botStatus.current_listing" style="font-size: 14px; color: #4a5568;">
+                        <i class="fas fa-car" style="color: #667eea; margin-right: 4px;"></i>
+                        [[ botStatus.current_listing ]]
+                    </span>
+                </div>
+                <span style="font-weight: 700; color: #667eea; font-size: 20px;">[[ botStatus.progress || 0 ]]%</span>
+            </div>
+            <div class="progress-bar" style="height: 12px; border-radius: 6px;">
+                <div class="progress-fill" :style="{width: (botStatus.progress || 0) + '%'}" style="border-radius: 6px; transition: width 0.5s ease;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; color: #718096;">
+                <span v-if="botStatus.current_listing_idx">
+                    Listing [[ botStatus.current_listing_idx ]] of [[ botStatus.total_listings ]]
+                </span>
+                <span v-if="botStatus.current_profile_idx">
+                    Profile [[ botStatus.current_profile_idx ]] of [[ botStatus.total_profiles ]]
+                </span>
+                <span v-if="botStatus.message" style="color: #4a5568; font-style: italic;">
+                    [[ botStatus.message ]]
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid" style="margin-bottom: 24px;">
+        <div class="stat-card">
+            <div class="stat-icon blue">
+                <i class="fas fa-play-circle"></i>
+            </div>
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Total Runs</div>
+            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ botActivityStats.total_runs ]]</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon green">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Successful Posts</div>
+            <div style="font-size: 32px; font-weight: 700; color: #48bb78;">[[ botActivityStats.successful ]]</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon orange">
+                <i class="fas fa-exclamation-circle"></i>
+            </div>
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Failed</div>
+            <div style="font-size: 32px; font-weight: 700; color: #ed8936;">[[ botActivityStats.failed ]]</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon purple">
+                <i class="fas fa-camera"></i>
+            </div>
+            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Screenshots</div>
+            <div style="font-size: 32px; font-weight: 700; color: #9f7aea;">[[ screenshots.length ]]</div>
+        </div>
+    </div>
+
+    <!-- Two Column Layout -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        
+        <!-- Left Column: Live Logs -->
+        <div class="card" style="height: fit-content;">
+            <div class="card-header">
+                <div class="card-title">
+                    <i class="fas fa-terminal" style="color: #48bb78; margin-right: 8px;"></i>
+                    Live Logs
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button @click="clearLogs" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                        <i class="fas fa-eraser"></i> Clear
+                    </button>
+                    <button @click="copyLogs" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+            </div>
+            <div ref="logsContainer" style="background: #1a202c; color: #48bb78; padding: 16px; border-radius: 8px; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; height: 350px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">
+                <div v-if="logs">[[ logs ]]</div>
+                <div v-else style="color: #718096; font-style: italic;">No logs yet. Start the bot to see activity...</div>
+                <span v-if="botStatus.process_running" class="blinking-cursor">▌</span>
+            </div>
+        </div>
+
+        <!-- Right Column: Current Session Info -->
+        <div class="card" style="height: fit-content;">
+            <div class="card-header">
+                <div class="card-title">
+                    <i class="fas fa-info-circle" style="color: #667eea; margin-right: 8px;"></i>
+                    Current Session
+                </div>
+                <span v-if="botStatus.process_running" class="badge badge-warning">
+                    <i class="fas fa-circle" style="font-size: 8px; margin-right: 4px;"></i> Active
+                </span>
+                <span v-else class="badge badge-success">Ready</span>
+            </div>
+            
+            <div style="space-y: 16px;">
+                <!-- Selected Profiles -->
+                <div style="margin-bottom: 16px;">
+                    <h4 style="font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 8px; text-transform: uppercase;">
+                        <i class="fab fa-edge" style="color: #0078d4; margin-right: 6px;"></i>
+                        Selected Profiles ([[ selectedProfiles.length ]])
+                    </h4>
+                    <div v-if="selectedProfiles.length > 0" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <div v-for="profile in selectedProfiles" :key="profile.id" 
+                             style="background: #eef2ff; padding: 6px 12px; border-radius: 6px; font-size: 13px; color: #4338ca; display: flex; align-items: center; gap: 6px;">
+                            <i class="fab fa-edge"></i>
+                            [[ profile.profile_name ]]
+                        </div>
+                    </div>
+                    <div v-else style="color: #a0aec0; font-size: 13px; font-style: italic;">No profiles selected</div>
+                </div>
+                
+                <!-- Selected Listings -->
+                <div style="margin-bottom: 16px;">
+                    <h4 style="font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 8px; text-transform: uppercase;">
+                        <i class="fas fa-car" style="color: #667eea; margin-right: 6px;"></i>
+                        Selected Listings ([[ selectedListings.length ]])
+                    </h4>
+                    <div v-if="selectedListings.length > 0" style="max-height: 150px; overflow-y: auto;">
+                        <div v-for="listingId in selectedListings" :key="listingId" 
+                             style="background: #f0fdf4; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: #166534; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-car"></i>
+                            <span v-if="getListingById(listingId)">
+                                [[ getListingById(listingId).Year ]] [[ getListingById(listingId).Make ]] [[ getListingById(listingId).Model ]]
+                            </span>
+                            <span v-else>Listing #[[ listingId ]]</span>
+                        </div>
+                    </div>
+                    <div v-else style="color: #a0aec0; font-size: 13px; font-style: italic;">No listings selected</div>
+                </div>
+
+                <!-- Bot Configuration Summary -->
+                <div>
+                    <h4 style="font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 8px; text-transform: uppercase;">
+                        <i class="fas fa-cog" style="color: #9f7aea; margin-right: 6px;"></i>
+                        Configuration
+                    </h4>
+                    <div style="background: #f7fafc; padding: 12px; border-radius: 8px; font-size: 13px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <div><span style="color: #718096;">Between Listings:</span> <strong>[[ botConfig.delays.between_listings ]]s</strong></div>
+                            <div><span style="color: #718096;">Between Profiles:</span> <strong>[[ botConfig.delays.between_profiles ]]s</strong></div>
+                            <div><span style="color: #718096;">After Publish:</span> <strong>[[ botConfig.delays.after_publish ]]s</strong></div>
+                            <div><span style="color: #718096;">Max Groups:</span> <strong>[[ botConfig.max_groups ]]</strong></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Screenshots Section -->
+    <div class="card" style="margin-top: 24px;">
+        <div class="card-header">
+            <div class="card-title">
+                <i class="fas fa-camera" style="color: #9f7aea; margin-right: 8px;"></i>
+                Screenshots ([[ screenshots.length ]])
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button @click="loadScreenshots" class="btn btn-secondary">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button v-if="screenshots.length > 0" @click="clearScreenshots" class="btn btn-danger">
+                    <i class="fas fa-trash"></i> Clear All
+                </button>
+            </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-if="screenshots.length === 0" class="empty-state" style="padding: 40px;">
+            <i class="fas fa-camera" style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;"></i>
+            <h3 style="font-size: 18px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No Screenshots Yet</h3>
+            <p style="color: #718096;">Screenshots will appear here when the bot runs</p>
+        </div>
+        
+        <!-- Screenshots Grid -->
+        <div v-else style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px;">
+            <div v-for="screenshot in screenshots" :key="screenshot.filename" 
+                 @click="viewScreenshot(screenshot)"
+                 style="background: white; border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s;"
+                 :style="screenshot.type === 'error' ? 'border-color: #fed7d7;' : screenshot.type === 'success' ? 'border-color: #c6f6d5;' : ''"
+                 @mouseover="$event.currentTarget.style.transform = 'translateY(-4px)'; $event.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.1)';"
+                 @mouseout="$event.currentTarget.style.transform = ''; $event.currentTarget.style.boxShadow = '';">
+                <div style="aspect-ratio: 16/9; background: #f1f3f5; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                    <img :src="'/screenshots/' + screenshot.filename" 
+                         :alt="screenshot.filename" 
+                         style="width: 100%; height: 100%; object-fit: cover;"
+                         @error="$event.target.style.display='none'; $event.target.nextElementSibling.style.display='flex';">
+                    <div style="display: none; flex-direction: column; align-items: center; color: #a0aec0;">
+                        <i class="fas fa-image" style="font-size: 32px; margin-bottom: 8px;"></i>
+                        <span style="font-size: 12px;">Preview unavailable</span>
+                    </div>
+                </div>
+                <div style="padding: 12px;">
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                        <span :class="'badge badge-' + (screenshot.type === 'error' ? 'error' : screenshot.type === 'success' ? 'success' : 'info')" 
+                              style="font-size: 10px; padding: 2px 6px;">
+                            [[ screenshot.type ]]
+                        </span>
+                    </div>
+                    <div style="font-size: 12px; color: #1a202c; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="screenshot.filename">
+                        [[ screenshot.filename ]]
+                    </div>
+                    <div style="font-size: 11px; color: #a0aec0; margin-top: 4px;">
+                        [[ formatDateTime(screenshot.created) ]]
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity History -->
+    <div class="card" style="margin-top: 24px;">
+        <div class="card-header">
+            <div class="card-title">
+                <i class="fas fa-history" style="color: #ed8936; margin-right: 8px;"></i>
+                Recent Bot Activity
+            </div>
+            <button @click="loadBotActivityHistory" class="btn btn-secondary">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+        
+        <div v-if="botActivityHistory.length === 0" class="empty-state" style="padding: 40px;">
+            <i class="fas fa-inbox" style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;"></i>
+            <h3 style="font-size: 18px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No Activity Yet</h3>
+            <p style="color: #718096;">Bot activity will be logged here</p>
+        </div>
+        
+        <div v-else class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Profile</th>
+                        <th>Vehicle</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                        <th>Duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="activity in botActivityHistory" :key="activity.id">
+                        <td>
+                            <div style="font-weight: 600; color: #1a202c; font-size: 13px;">[[ formatDate(activity.timestamp) ]]</div>
+                            <div style="color: #718096; font-size: 12px;">[[ formatTime(activity.timestamp) ]]</div>
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fab fa-edge" style="color: #0078d4;"></i>
+                                <span>[[ activity.profile_name ]]</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div style="font-weight: 500;">[[ activity.vehicle_info ]]</div>
+                        </td>
+                        <td>
+                            <span class="badge badge-info">[[ activity.action ]]</span>
+                        </td>
+                        <td>
+                            <span :class="'badge badge-' + getStatusType(activity.status)">[[ activity.status ]]</span>
+                        </td>
+                        <td style="color: #718096; font-size: 13px;">
+                            [[ activity.duration || '-' ]]
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+.blinking-cursor {
+    animation: blink 1s step-end infinite;
+    color: #48bb78;
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.fa-pulse {
+    animation: fa-pulse 1s ease-in-out infinite;
+}
+
+@keyframes fa-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+</style>

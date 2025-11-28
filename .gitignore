@@ -1,73 +1,32 @@
-# Python cache files
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-
-# Virtual Environment
 venv/
 env/
-ENV/
 
-# Application specific files
+# App specific
 listings.csv
 profile_locations.json
 selected_profiles.txt
 selected_listings.csv
 error_screenshot_*.png
+bot_status.json
+bot_stop_signal.txt
+bot_config.json
 
-# Chrome profile data
-Chrome User Data/
+# Screenshots folder contents (not the folder itself)
+fbmpss/*.png
 
-# Local development settings
+# Secrets
 .env
-.env.local
-.env.*.local
+*.env
+credentials.json
+token.pickle
 
 # Logs
 *.log
-logs/
-error_logs/
+app.log
 
-# Temporary files
+# Temp
+temp_uploads/
 temp/
-tmp/
-
-# Debug files
-debug/
-
-# IDE specific files
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-
-# Distribution / packaging
-dist/
-build/
-*.egg-info/
-
-# Bot specific directories
-chromedriver*/
-screenshots/
-downloads/
-uploads/
-images/
-profiles/
-
-# Database files
-*.db
-*.sqlite3
-
-# Test files
-test_listings.csv
-test_profiles.json
-test_*.json
-test_*.csv
-
-.env
-*.env
-selected_profiles.txt
-selected_listings.csv
-credentials.json
-token.pickle

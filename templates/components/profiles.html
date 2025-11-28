@@ -15,38 +15,24 @@
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 16px;">
                 <div>
                     <label>Profile Name <span style="color: #f56565;">*</span></label>
-                    <input v-model="profileForm.profile_name" 
-                           type="text" 
-                           required 
-                           placeholder="e.g., Work Profile, Personal, VA Carz Main">
+                    <input v-model="profileForm.profile_name" type="text" required placeholder="e.g., Work Profile, Personal">
                 </div>
                 <div>
                     <label>Profile Path <span style="color: #f56565;">*</span></label>
                     <div style="display: flex; gap: 8px;">
-                        <input v-model="profileForm.profile_path" 
-                               type="text" 
-                               required 
-                               placeholder="C:\Users\YourName\AppData\Local\Microsoft\Edge\User Data\Profile 1"
-                               style="flex: 1;">
+                        <input v-model="profileForm.profile_path" type="text" required placeholder="C:\Users\...\Edge\User Data\Profile 1" style="flex: 1;">
                         <button type="button" @click="validatePath" class="btn btn-secondary" style="padding: 10px 16px;" title="Validate Path">
                             <i class="fas fa-check-circle"></i>
                         </button>
                     </div>
-                    <small style="color: #718096; font-size: 12px; margin-top: 4px; display: block;">
-                        Typical Edge path: %LOCALAPPDATA%\Microsoft\Edge\User Data\Profile X
-                    </small>
                 </div>
                 <div>
                     <label>Location (for Marketplace)</label>
-                    <input v-model="profileForm.location" 
-                           type="text" 
-                           placeholder="e.g., Washington D.C., Woodbridge, Virginia">
+                    <input v-model="profileForm.location" type="text" placeholder="e.g., Washington D.C.">
                 </div>
             </div>
             <div style="display: flex; justify-content: flex-end; gap: 12px;">
-                <button v-if="editingProfile" type="button" @click="cancelProfileEdit" class="btn btn-secondary">
-                    Cancel
-                </button>
+                <button v-if="editingProfile" type="button" @click="cancelProfileEdit" class="btn btn-secondary">Cancel</button>
                 <button type="submit" class="btn btn-success">
                     <i :class="editingProfile ? 'fas fa-save' : 'fas fa-plus-circle'"></i>
                     [[ editingProfile ? 'Update Profile' : 'Add Profile' ]]
@@ -64,147 +50,56 @@
                 <span :class="selectedProfiles.length >= maxProfileSelection ? 'badge badge-error' : 'badge badge-success'">
                     [[ selectedProfiles.length ]] / [[ maxProfileSelection ]] Selected
                 </span>
-                <button @click="loadProfiles" class="btn btn-secondary">
-                    <i class="fas fa-sync-alt"></i> Refresh
-                </button>
+                <button @click="loadProfiles" class="btn btn-secondary"><i class="fas fa-sync-alt"></i> Refresh</button>
             </div>
         </div>
 
-        <!-- Loading State -->
         <div v-if="loadingProfiles" class="empty-state">
             <div class="spinner" style="margin: 0 auto 20px;"></div>
             <p style="font-weight: 600; color: #4a5568;">Loading profiles...</p>
         </div>
 
-        <!-- Empty State -->
         <div v-else-if="profiles.length === 0" class="empty-state">
             <i class="fab fa-edge" style="font-size: 64px; color: #0078d4; opacity: 0.3; margin-bottom: 16px;"></i>
             <h3 style="font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No Edge Profiles</h3>
-            <p style="color: #718096; margin-bottom: 16px;">Add your first Edge profile to get started</p>
+            <p style="color: #718096;">Add your first Edge profile to get started</p>
         </div>
 
-        <!-- Profiles Grid -->
         <div v-else style="display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px;">
-            <div v-for="profile in profiles" :key="profile.id" 
-                 class="profile-card"
-                 :class="{
-                     'selected': selectedProfiles.some(p => p.id === profile.id),
-                     'inactive': !profile.is_active
-                 }"
-                 :style="!profile.is_active ? 'opacity: 0.6;' : ''">
+            <div v-for="profile in profiles" :key="profile.id" class="profile-card" :class="{'selected': selectedProfiles.some(p => p.id === profile.id)}" :style="!profile.is_active ? 'opacity: 0.6;' : ''">
                 <div style="display: flex; align-items: start; gap: 12px;">
-                    <!-- Selection Checkbox -->
-                    <input type="checkbox" 
-                           :checked="selectedProfiles.some(p => p.id === profile.id)"
-                           @change="onProfileCheckboxChange($event, profile)"
-                           :disabled="!profile.is_active"
-                           class="custom-checkbox"
-                           style="margin-top: 4px;">
-                    
+                    <input type="checkbox" :checked="selectedProfiles.some(p => p.id === profile.id)" @change="onProfileCheckboxChange($event, profile)" :disabled="!profile.is_active" class="custom-checkbox" style="margin-top: 4px;">
                     <div style="flex: 1;">
-                        <!-- Profile Header -->
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
                                     <i class="fab fa-edge" style="color: white; font-size: 18px;"></i>
                                 </div>
                                 <div>
-                                    <div style="font-weight: 600; color: #1a202c; font-size: 16px;">
-                                        [[ profile.profile_name ]]
-                                    </div>
+                                    <div style="font-weight: 600; color: #1a202c; font-size: 16px;">[[ profile.profile_name ]]</div>
                                     <div style="display: flex; align-items: center; gap: 6px;">
                                         <span :class="profile.is_active ? 'status-dot active' : 'status-dot inactive'"></span>
-                                        <span style="font-size: 12px; color: #718096;">
-                                            [[ profile.is_active ? 'Active' : 'Inactive' ]]
-                                        </span>
+                                        <span style="font-size: 12px; color: #718096;">[[ profile.is_active ? 'Active' : 'Inactive' ]]</span>
                                     </div>
                                 </div>
                             </div>
-                            
-                            <!-- Actions Menu -->
                             <div style="display: flex; gap: 6px;">
-                                <button @click="editProfileClick(profile)" 
-                                        class="btn btn-secondary" 
-                                        style="padding: 6px 10px; font-size: 12px;"
-                                        title="Edit Profile">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button @click="toggleProfileActive(profile)" 
-                                        :class="profile.is_active ? 'btn btn-secondary' : 'btn btn-success'"
-                                        style="padding: 6px 10px; font-size: 12px;"
-                                        :title="profile.is_active ? 'Deactivate' : 'Activate'">
-                                    <i :class="profile.is_active ? 'fas fa-pause' : 'fas fa-play'"></i>
-                                </button>
-                                <button @click="confirmDeleteProfile(profile)" 
-                                        class="btn btn-danger" 
-                                        style="padding: 6px 10px; font-size: 12px;"
-                                        title="Delete Profile">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                                <button @click="editProfileClick(profile)" class="btn btn-secondary" style="padding: 6px 10px; font-size: 12px;"><i class="fas fa-edit"></i></button>
+                                <button @click="toggleProfileActive(profile)" :class="profile.is_active ? 'btn btn-secondary' : 'btn btn-success'" style="padding: 6px 10px; font-size: 12px;"><i :class="profile.is_active ? 'fas fa-pause' : 'fas fa-play'"></i></button>
+                                <button @click="confirmDeleteProfile(profile)" class="btn btn-danger" style="padding: 6px 10px; font-size: 12px;"><i class="fas fa-trash"></i></button>
                             </div>
                         </div>
-                        
-                        <!-- Profile Path -->
                         <div style="background: #f7fafc; padding: 10px; border-radius: 6px; margin-bottom: 12px;">
-                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                                <i class="fas fa-folder" style="color: #667eea; font-size: 12px;"></i>
-                                <span style="font-size: 11px; font-weight: 600; color: #4a5568; text-transform: uppercase;">Profile Path</span>
-                            </div>
-                            <div style="font-size: 12px; color: #718096; word-break: break-all; font-family: monospace;">
-                                [[ profile.profile_path ]]
-                            </div>
+                            <div style="font-size: 12px; color: #718096; word-break: break-all; font-family: monospace;">[[ profile.profile_path ]]</div>
                         </div>
-                        
-                        <!-- Location Input -->
                         <div>
-                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                                <i class="fas fa-map-marker-alt" style="color: #667eea; font-size: 12px;"></i>
-                                <span style="font-size: 11px; font-weight: 600; color: #4a5568; text-transform: uppercase;">Marketplace Location</span>
-                            </div>
                             <div style="display: flex; gap: 8px;">
-                                <input type="text" 
-                                       v-model="profile.location" 
-                                       placeholder="Enter location for Marketplace"
-                                       @blur="updateProfileLocation(profile)"
-                                       style="flex: 1; font-size: 13px; padding: 8px;">
-                                <button @click="updateProfileLocation(profile)" 
-                                        class="btn btn-primary" 
-                                        style="padding: 8px 12px;"
-                                        title="Save Location">
-                                    <i class="fas fa-save"></i>
-                                </button>
+                                <input type="text" v-model="profile.location" placeholder="Enter location" @blur="updateProfileLocation(profile)" style="flex: 1; font-size: 13px; padding: 8px;">
+                                <button @click="updateProfileLocation(profile)" class="btn btn-primary" style="padding: 8px 12px;"><i class="fas fa-save"></i></button>
                             </div>
-                        </div>
-                        
-                        <!-- Created/Updated Info -->
-                        <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between;">
-                            <span style="font-size: 11px; color: #a0aec0;">
-                                Created: [[ formatDate(profile.created_at) ]]
-                            </span>
-                            <span style="font-size: 11px; color: #a0aec0;">
-                                Updated: [[ formatDate(profile.updated_at) ]]
-                            </span>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Help Card -->
-    <div class="card" style="margin-top: 24px; background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);">
-        <div style="display: flex; align-items: start; gap: 16px;">
-            <div style="width: 48px; height: 48px; background: #667eea; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <i class="fas fa-info-circle" style="color: white; font-size: 24px;"></i>
-            </div>
-            <div>
-                <h4 style="font-weight: 600; color: #1e3a8a; margin-bottom: 8px;">How to Find Your Edge Profile Path</h4>
-                <ol style="color: #3730a3; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;">
-                    <li>Open Microsoft Edge and type <code style="background: white; padding: 2px 6px; border-radius: 4px; font-size: 13px;">edge://version</code> in the address bar</li>
-                    <li>Look for "Profile Path" - this is your profile's location</li>
-                    <li>Copy the entire path and paste it in the Profile Path field above</li>
-                    <li>The path typically looks like: <code style="background: white; padding: 2px 6px; border-radius: 4px; font-size: 13px;">C:\Users\YourName\AppData\Local\Microsoft\Edge\User Data\Profile 1</code></li>
-                </ol>
             </div>
         </div>
     </div>

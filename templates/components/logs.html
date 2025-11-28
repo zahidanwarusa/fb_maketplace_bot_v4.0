@@ -2,8 +2,11 @@
 <div v-if="logs" class="card">
     <div class="card-header">
         <div class="card-title">Execution Logs</div>
+        <button @click="logs = ''" class="btn btn-secondary" style="padding: 8px 12px;">
+            <i class="fas fa-trash"></i> Clear
+        </button>
     </div>
-    <div style="background: #1a202c; color: #48bb78; padding: 20px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow-x: auto;">
+    <div style="background: #1a202c; color: #48bb78; padding: 20px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow-x: auto; max-height: 400px; overflow-y: auto;">
         <pre style="white-space: pre-wrap; margin: 0;">[[ logs ]]</pre>
     </div>
 </div>

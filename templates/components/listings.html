@@ -1,4 +1,4 @@
-<!-- Listings Tab Component - FIXED -->
+<!-- Listings Tab Component -->
 <div v-if="activeTab === 'listings'">
     <div class="card">
         <div class="card-header">
@@ -6,33 +6,19 @@
             <div style="display: flex; gap: 12px; align-items: center;">
                 <span class="badge badge-info">[[ listings.length ]] Total</span>
                 <span class="badge badge-success">[[ selectedListings.length ]] Selected</span>
-                <button @click="loadListings" class="btn btn-secondary">
-                    <i class="fas fa-sync-alt"></i> Refresh
-                </button>
+                <button @click="loadListings" class="btn btn-secondary"><i class="fas fa-sync-alt"></i> Refresh</button>
             </div>
         </div>
-        
-        <!-- Empty State -->
         <div v-if="listings.length === 0" class="empty-state">
             <i class="fas fa-car" style="font-size: 64px; opacity: 0.3; margin-bottom: 16px;"></i>
-            <h3 style="font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No Listings Found</h3>
-            <p style="color: #718096; margin-bottom: 16px;">Add your first vehicle listing to get started</p>
-            <button @click="activeTab = 'add-listing'" class="btn btn-primary">
-                <i class="fas fa-plus-circle"></i> Add Listing
-            </button>
+            <h3>No Listings Found</h3>
+            <button @click="activeTab = 'add-listing'" class="btn btn-primary" style="margin-top: 16px;"><i class="fas fa-plus-circle"></i> Add Listing</button>
         </div>
-        
-        <!-- Listings Table -->
         <div v-else class="table-container">
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 40px;">
-                            <input type="checkbox" 
-                                   @change="toggleAllListings"
-                                   :checked="allListingsSelected"
-                                   class="custom-checkbox">
-                        </th>
+                        <th style="width: 40px;"><input type="checkbox" @change="toggleAllListings" :checked="allListingsSelected" class="custom-checkbox"></th>
                         <th>Vehicle</th>
                         <th>Details</th>
                         <th>Price</th>
@@ -41,52 +27,27 @@
                 </thead>
                 <tbody>
                     <tr v-for="listing in listings" :key="listing.id">
-                        <td>
-                            <input type="checkbox" 
-                                   v-model="selectedListings" 
-                                   :value="listing.id" 
-                                   class="custom-checkbox">
-                        </td>
+                        <td><input type="checkbox" v-model="selectedListings" :value="listing.id" class="custom-checkbox"></td>
                         <td>
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
                                     <i class="fas fa-car" style="color: white; font-size: 20px;"></i>
                                 </div>
                                 <div>
-                                    <div style="font-weight: 600; color: #1a202c;">
-                                        [[ listing.Year ]] [[ listing.Make ]]
-                                    </div>
-                                    <div style="color: #718096; font-size: 14px;">
-                                        [[ listing.Model ]]
-                                    </div>
+                                    <div style="font-weight: 600; color: #1a202c;">[[ listing.Year ]] [[ listing.Make ]]</div>
+                                    <div style="color: #718096; font-size: 14px;">[[ listing.Model ]]</div>
                                 </div>
                             </div>
                         </td>
                         <td>
                             <div style="color: #4a5568;">[[ listing['Body Style'] ]]</div>
-                            <div style="color: #718096; font-size: 13px;">
-                                [[ listing['Exterior Color'] ]] • [[ formatNumber(listing.Mileage) ]] mi
-                            </div>
+                            <div style="color: #718096; font-size: 13px;">[[ listing['Exterior Color'] ]] • [[ formatNumber(listing.Mileage) ]] mi</div>
                         </td>
-                        <td>
-                            <div style="font-size: 18px; font-weight: 700; color: #48bb78;">
-                                $[[ formatNumber(listing.Price) ]]
-                            </div>
-                        </td>
+                        <td style="font-size: 18px; font-weight: 700; color: #48bb78;">$[[ formatNumber(listing.Price) ]]</td>
                         <td>
                             <div style="display: flex; gap: 8px;">
-                                <button @click="editListing(listing.id)" 
-                                        class="btn btn-secondary" 
-                                        style="padding: 8px 12px;"
-                                        title="Edit Listing">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button @click="confirmDelete(listing.id)" 
-                                        class="btn btn-danger" 
-                                        style="padding: 8px 12px;"
-                                        title="Delete Listing">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                                <button @click="editListing(listing.id)" class="btn btn-secondary" style="padding: 8px 12px;"><i class="fas fa-edit"></i></button>
+                                <button @click="confirmDelete(listing.id)" class="btn btn-danger" style="padding: 8px 12px;"><i class="fas fa-trash"></i></button>
                             </div>
                         </td>
                     </tr>

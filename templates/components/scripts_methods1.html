@@ -1,456 +1,58 @@
 methods: {
-        // ========================================================================
-        // PAGE NAVIGATION METHODS
-        // ========================================================================
         getPageTitle() {
-            const titles = {
-                'dashboard': 'Dashboard',
-                'profiles': 'Edge Profiles',
-                'listings': 'Vehicle Listings',
-                'add-listing': 'Add New Listing',
-                'media': 'Media Library',
-                'history': 'Upload History',
-                'deleted': 'Deleted Listings',
-                'schedule': 'Schedule'
-            };
+            const titles = {'dashboard': 'Dashboard','bot-activities': 'Bot Activities','profiles': 'Edge Profiles','listings': 'Vehicle Listings','add-listing': 'Add New Listing','media': 'Media Library','history': 'Upload History','deleted': 'Deleted Listings','schedule': 'Schedule'};
             return titles[this.activeTab] || 'Dashboard';
         },
         getPageSubtitle() {
-            const subtitles = {
-                'dashboard': 'Overview of your marketplace automation',
-                'profiles': 'Manage your Microsoft Edge profiles for posting',
-                'listings': 'Manage your vehicle listings',
-                'add-listing': 'Create a new vehicle listing',
-                'media': 'Manage your media files in Google Drive',
-                'history': 'View upload history and statistics',
-                'deleted': 'Restore previously deleted listings',
-                'schedule': 'Manage scheduled posts'
-            };
+            const subtitles = {'dashboard': 'Overview of your marketplace automation','bot-activities': 'Monitor bot status, logs, and activity history','profiles': 'Manage your Microsoft Edge profiles','listings': 'Manage your vehicle listings','add-listing': 'Create a new vehicle listing','media': 'Manage your media files in Google Drive','history': 'View upload history and statistics','deleted': 'Restore previously deleted listings','schedule': 'Manage scheduled posts'};
             return subtitles[this.activeTab] || '';
         },
-
-        // ========================================================================
-        // EDGE PROFILE METHODS
-        // ========================================================================
         loadProfiles() {
             this.loadingProfiles = true;
-            axios.get('/get_profiles')
-                .then(response => {
-                    if (response.data.status === 'success') {
-                        this.profiles = response.data.profiles;
-                        console.log(`✅ Loaded ${this.profiles.length} Edge profiles`);
-                    } else {
-                        this.showToast('error', response.data.message || 'Failed to load profiles');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading profiles:', error);
-                    this.showToast('error', 'Failed to load profiles');
-                })
-                .finally(() => {
-                    this.loadingProfiles = false;
-                });
+            axios.get('/get_profiles').then(response => {
+                if (response.data.status === 'success') { this.profiles = response.data.profiles; console.log('Loaded ' + this.profiles.length + ' profiles'); }
+                else { this.showToast('error', response.data.message || 'Failed to load profiles'); }
+            }).catch(error => { console.error('Error loading profiles:', error); this.showToast('error', 'Failed to load profiles'); }).finally(() => { this.loadingProfiles = false; });
         },
         addProfile() {
-            if (!this.profileForm.profile_name || !this.profileForm.profile_path) {
-                this.showToast('warning', 'Please fill in profile name and path');
-                return;
-            }
-            
-            axios.post('/add_profile', this.profileForm)
-                .then(response => {
-                    if (response.data.status === 'success') {
-                        this.showDialog('success', 'Success!', 'Edge profile added successfully!');
-                        this.resetProfileForm();
-                        this.loadProfiles();
-                    } else {
-                        this.showDialog('error', 'Error', response.data.message || 'Failed to add profile');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error adding profile:', error);
-                    const errorMsg = error.response?.data?.message || 'Failed to add profile';
-                    this.showDialog('error', 'Error', errorMsg);
-                });
+            if (!this.profileForm.profile_name || !this.profileForm.profile_path) { this.showToast('warning', 'Please fill in profile name and path'); return; }
+            axios.post('/add_profile', this.profileForm).then(response => {
+                if (response.data.status === 'success') { this.showDialog('success', 'Success!', 'Profile added!'); this.resetProfileForm(); this.loadProfiles(); }
+                else { this.showDialog('error', 'Error', response.data.message || 'Failed to add profile'); }
+            }).catch(error => { this.showDialog('error', 'Error', error.response?.data?.message || 'Failed to add profile'); });
         },
-        editProfileClick(profile) {
-            this.editingProfile = profile.id;
-            this.profileForm = {
-                id: profile.id,
-                profile_name: profile.profile_name,
-                profile_path: profile.profile_path,
-                location: profile.location || ''
-            };
-            // Scroll to top of form
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        },
-        cancelProfileEdit() {
-            this.editingProfile = null;
-            this.resetProfileForm();
-        },
+        editProfileClick(profile) { this.editingProfile = profile.id; this.profileForm = { id: profile.id, profile_name: profile.profile_name, profile_path: profile.profile_path, location: profile.location || '' }; },
+        cancelProfileEdit() { this.editingProfile = null; this.resetProfileForm(); },
         updateProfile() {
-            if (!this.profileForm.profile_name || !this.profileForm.profile_path) {
-                this.showToast('warning', 'Please fill in profile name and path');
-                return;
-            }
-            
-            axios.post('/update_profile', this.profileForm)
-                .then(response => {
-                    if (response.data.status === 'success') {
-                        this.showDialog('success', 'Updated!', 'Profile updated successfully!');
-                        this.cancelProfileEdit();
-                        this.loadProfiles();
-                    } else {
-                        this.showDialog('error', 'Error', response.data.message || 'Failed to update profile');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error updating profile:', error);
-                    const errorMsg = error.response?.data?.message || 'Failed to update profile';
-                    this.showDialog('error', 'Error', errorMsg);
-                });
+            if (!this.profileForm.profile_name || !this.profileForm.profile_path) { this.showToast('warning', 'Please fill in profile name and path'); return; }
+            axios.post('/update_profile', this.profileForm).then(response => {
+                if (response.data.status === 'success') { this.showDialog('success', 'Updated!', 'Profile updated!'); this.cancelProfileEdit(); this.loadProfiles(); }
+                else { this.showDialog('error', 'Error', response.data.message || 'Failed to update profile'); }
+            }).catch(error => { this.showDialog('error', 'Error', error.response?.data?.message || 'Failed to update profile'); });
         },
         async confirmDeleteProfile(profile) {
-            const confirmed = await this.showDialog('confirm', 'Delete Profile', 
-                `Are you sure you want to delete "${profile.profile_name}"?`, 'Delete');
+            const confirmed = await this.showDialog('confirm', 'Delete Profile', 'Delete "' + profile.profile_name + '"?', 'Delete');
             if (!confirmed) return;
-            
-            try {
-                const response = await axios.post('/delete_profile', { id: profile.id });
-                
-                if (response.data.status === 'success') {
-                    this.showToast('success', 'Profile deleted successfully');
-                    // Remove from selected if it was selected
-                    this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id);
-                    this.loadProfiles();
-                } else {
-                    this.showToast('error', response.data.message || 'Failed to delete profile');
-                }
-            } catch (error) {
-                console.error('Error deleting profile:', error);
-                const errorMsg = error.response?.data?.message || 'Failed to delete profile';
-                this.showDialog('error', 'Error', errorMsg);
-            }
+            try { const response = await axios.post('/delete_profile', { id: profile.id }); if (response.data.status === 'success') { this.showToast('success', 'Profile deleted'); this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id); this.loadProfiles(); } else { this.showToast('error', response.data.message || 'Failed to delete profile'); } } catch (error) { this.showDialog('error', 'Error', error.response?.data?.message || 'Failed to delete profile'); }
         },
-        resetProfileForm() {
-            this.profileForm = {
-                id: null,
-                profile_name: '',
-                profile_path: '',
-                location: ''
-            };
-        },
-        updateProfileLocation(profile) {
-            axios.post('/update_profile_location', {
-                id: profile.id,
-                location: profile.location
-            })
-            .then(response => {
-                if (response.data.status === 'success') {
-                    this.showToast('success', 'Location updated!');
-                } else {
-                    this.showToast('error', response.data.message || 'Failed to update location');
-                }
-            })
-            .catch(error => {
-                console.error('Error updating location:', error);
-                this.showToast('error', 'Failed to update location');
-            });
-        },
-        toggleProfileActive(profile) {
-            const newStatus = !profile.is_active;
-            axios.post('/toggle_profile_active', {
-                id: profile.id,
-                is_active: newStatus
-            })
-            .then(response => {
-                if (response.data.status === 'success') {
-                    profile.is_active = newStatus;
-                    const statusText = newStatus ? 'activated' : 'deactivated';
-                    this.showToast('success', `Profile ${statusText}!`);
-                    
-                    // Remove from selected if deactivated
-                    if (!newStatus) {
-                        this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id);
-                    }
-                } else {
-                    this.showToast('error', response.data.message || 'Failed to update status');
-                }
-            })
-            .catch(error => {
-                console.error('Error toggling profile status:', error);
-                this.showToast('error', 'Failed to update profile status');
-            });
-        },
-        validatePath() {
-            if (!this.profileForm.profile_path) {
-                this.showToast('warning', 'Please enter a path first');
-                return;
-            }
-            
-            axios.post('/validate_profile_path', { path: this.profileForm.profile_path })
-                .then(response => {
-                    if (response.data.status === 'success') {
-                        if (response.data.exists && response.data.is_directory) {
-                            this.showDialog('success', 'Valid Path', 'The profile path exists and is valid!');
-                        } else if (response.data.exists) {
-                            this.showDialog('warning', 'Not a Directory', 'The path exists but is not a directory.');
-                        } else {
-                            this.showDialog('warning', 'Path Not Found', 'The profile path does not exist on this system.');
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Error validating path:', error);
-                    this.showToast('error', 'Failed to validate path');
-                });
-        },
-        isProfileSelected(profile) {
-            return this.selectedProfiles.some(p => p.id === profile.id);
-        },
-        onProfileCheckboxChange(event, profile) {
-            const isChecked = event.target.checked;
-            
-            // Don't allow selecting inactive profiles
-            if (!profile.is_active) {
-                event.preventDefault();
-                event.target.checked = false;
-                this.showToast('warning', 'Cannot select an inactive profile');
-                return false;
-            }
-            
-            if (isChecked) {
-                if (this.selectedProfiles.length >= this.maxProfileSelection) {
-                    event.preventDefault();
-                    event.target.checked = false;
-                    this.showDialog('warning', 'Selection Limit Reached', 
-                        `You can only select up to ${this.maxProfileSelection} profiles at a time.`);
-                    return false;
-                }
-                this.selectedProfiles.push(profile);
-            } else {
-                this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id);
-            }
-        },
-
-        // ========================================================================
-        // DIALOG & TOAST METHODS
-        // ========================================================================
-        showDialog(type, title, message, confirmText = 'OK') {
-            return new Promise((resolve) => {
-                this.dialog = {
-                    show: true,
-                    type: type,
-                    title: title,
-                    message: message,
-                    confirmText: confirmText,
-                    onConfirm: () => {
-                        this.dialog.show = false;
-                        resolve(true);
-                    },
-                    onCancel: () => {
-                        this.dialog.show = false;
-                        resolve(false);
-                    }
-                };
-            });
-        },
-        handleDialogConfirm() {
-            if (this.dialog.onConfirm) this.dialog.onConfirm();
-        },
-        handleDialogCancel() {
-            if (this.dialog.onCancel) this.dialog.onCancel();
-        },
-        getDialogIcon(type) {
-            const icons = {
-                'success': 'fas fa-check-circle',
-                'error': 'fas fa-times-circle',
-                'warning': 'fas fa-exclamation-triangle',
-                'info': 'fas fa-info-circle',
-                'confirm': 'fas fa-question-circle'
-            };
-            return icons[type] || icons['info'];
-        },
-        showToast(type, message, duration = 3000) {
-            this.toast = { show: true, type: type, message: message };
-            setTimeout(() => { this.toast.show = false; }, duration);
-        },
-        getToastIcon(type) {
-            const icons = {
-                'success': 'fas fa-check-circle',
-                'error': 'fas fa-times-circle',
-                'warning': 'fas fa-exclamation-triangle',
-                'info': 'fas fa-info-circle'
-            };
-            return icons[type] || icons['info'];
-        },
-        getToastColor(type) {
-            const colors = {
-                'success': 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
-                'error': 'linear-gradient(135deg, #f56565 0%, #e53e3e 100%)',
-                'warning': 'linear-gradient(135deg, #ed8936 0%, #dd6b20 100%)',
-                'info': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                'confirm': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-            };
-            return colors[type] || colors['info'];
-        },
-
-        // ========================================================================
-        // LISTING METHODS - FIXED
-        // ========================================================================
-        resetForm() {
-            this.newListing = {
-                Year: '', Make: '', Model: '', Mileage: '', Price: '',
-                'Body Style': '', 'Exterior Color': '', 'Interior Color': '',
-                'Vehicle Condition': '', 'Fuel Type': '', Transmission: '',
-                Description: '', 'Images Path': '', 'selectedDay': ''
-            };
-            this.showToast('info', 'Form reset');
-        },
-        addListing() {
-            axios.post('/add_listing', this.newListing)
-                .then(response => {
-                    if (response.data.status === 'success') {
-                        this.resetForm();
-                        this.showDialog('success', 'Success!', 'Listing added successfully!');
-                        // Reload listings from server to get the new ID
-                        this.loadListings();
-                    } else {
-                        this.showDialog('error', 'Error', response.data.message || 'Failed to add listing.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    const errorMsg = error.response?.data?.message || 'Failed to add listing.';
-                    this.showDialog('error', 'Error', errorMsg);
-                });
-        },
-        
-        // FIXED: Find listing by ID instead of using ID as array index
-        editListing(listingId) {
-            console.log('Editing listing with ID:', listingId);
-            
-            // Find the listing by ID, not by using ID as index
-            const listing = this.listings.find(l => l.id === listingId);
-            
-            if (!listing) {
-                console.error('Listing not found with ID:', listingId);
-                this.showToast('error', 'Listing not found');
-                return;
-            }
-            
-            // Store the listing ID for reference
-            this.editingListing = listingId;
-            
-            // Deep copy the listing data to the edit form
-            this.editForm = JSON.parse(JSON.stringify(listing));
-            
-            console.log('Edit form populated:', this.editForm);
-        },
-        
-        cancelEdit() {
-            this.editingListing = null;
-            this.editForm = {};
-        },
-        
-        updateListing() {
-            // Validate that we have an ID
-            if (!this.editForm.id) {
-                this.showToast('error', 'No listing ID found');
-                return;
-            }
-            
-            console.log('Updating listing:', this.editForm);
-            
-            axios.post('/update_listing', this.editForm)
-                .then(response => {
-                    if (response.data.status === 'success') {
-                        this.cancelEdit();
-                        this.showDialog('success', 'Updated!', 'Listing updated successfully!');
-                        // Reload listings from server to ensure data consistency
-                        this.loadListings();
-                    } else {
-                        this.showDialog('error', 'Error', response.data.message || 'Failed to update listing.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    const errorMsg = error.response?.data?.message || 'Failed to update listing.';
-                    this.showDialog('error', 'Error', errorMsg);
-                });
-        },
-        
-        // FIXED: Delete by ID with proper error handling
-        async confirmDelete(listingId) {
-            console.log('Deleting listing with ID:', listingId);
-            
-            // Validate listingId
-            if (!listingId && listingId !== 0) {
-                console.error('Invalid listing ID:', listingId);
-                this.showToast('error', 'Invalid listing ID');
-                return;
-            }
-            
-            const confirmed = await this.showDialog('confirm', 'Confirm Delete', 'Delete this listing?', 'Delete');
-            if (!confirmed) return;
-            
-            try {
-                // Send the listing ID to the backend
-                const response = await axios.post('/delete_listing', { 
-                    index: listingId 
-                }, {
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                console.log('Delete response:', response.data);
-                
-                if (response.data.status === 'success') {
-                    this.showToast('success', 'Listing moved to deleted listings');
-                    
-                    // Remove from local array by filtering out the deleted listing
-                    this.listings = this.listings.filter(l => l.id !== listingId);
-                    
-                    // Also remove from selected listings if it was selected
-                    this.selectedListings = this.selectedListings.filter(id => id !== listingId);
-                    
-                    // Reload deleted listings if on that tab
-                    if (this.activeTab === 'deleted') {
-                        this.loadDeletedListings();
-                    }
-                } else {
-                    this.showToast('error', response.data.message || 'Failed to delete listing');
-                }
-            } catch (error) {
-                console.error('Error deleting listing:', error);
-                const errorMessage = error.response?.data?.message || 'Failed to delete listing';
-                this.showDialog('error', 'Error', errorMessage);
-            }
-        },
-        
-        toggleAllListings(event) {
-            if (event.target.checked) {
-                // Select all listing IDs
-                this.selectedListings = this.listings.map(listing => listing.id);
-            } else {
-                this.selectedListings = [];
-            }
-        },
-        
-        loadListings() {
-            axios.get('/get_listings')
-                .then(response => {
-                    if (response.data.status === 'success') {
-                        this.listings = response.data.listings;
-                        console.log(`✅ Loaded ${this.listings.length} listings`);
-                    } else {
-                        console.error('Failed to load listings:', response.data.message);
-                        this.showToast('error', 'Failed to load listings');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading listings:', error);
-                    this.showToast('error', 'Failed to load listings');
-                });
-        },
+        resetProfileForm() { this.profileForm = { id: null, profile_name: '', profile_path: '', location: '' }; },
+        updateProfileLocation(profile) { axios.post('/update_profile_location', { id: profile.id, location: profile.location }).then(response => { if (response.data.status === 'success') { this.showToast('success', 'Location updated!'); } else { this.showToast('error', response.data.message || 'Failed to update location'); } }).catch(error => { this.showToast('error', 'Failed to update location'); }); },
+        toggleProfileActive(profile) { const newStatus = !profile.is_active; axios.post('/toggle_profile_active', { id: profile.id, is_active: newStatus }).then(response => { if (response.data.status === 'success') { profile.is_active = newStatus; this.showToast('success', 'Profile ' + (newStatus ? 'activated' : 'deactivated')); if (!newStatus) { this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id); } } else { this.showToast('error', response.data.message || 'Failed to update status'); } }).catch(error => { this.showToast('error', 'Failed to update profile status'); }); },
+        validatePath() { if (!this.profileForm.profile_path) { this.showToast('warning', 'Please enter a path first'); return; } axios.post('/validate_profile_path', { path: this.profileForm.profile_path }).then(response => { if (response.data.status === 'success') { if (response.data.exists && response.data.is_directory) { this.showDialog('success', 'Valid Path', 'The profile path exists and is valid!'); } else if (response.data.exists) { this.showDialog('warning', 'Not a Directory', 'The path exists but is not a directory.'); } else { this.showDialog('warning', 'Path Not Found', 'The profile path does not exist.'); } } }).catch(error => { this.showToast('error', 'Failed to validate path'); }); },
+        isProfileSelected(profile) { return this.selectedProfiles.some(p => p.id === profile.id); },
+        onProfileCheckboxChange(event, profile) { const isChecked = event.target.checked; if (!profile.is_active) { event.preventDefault(); event.target.checked = false; this.showToast('warning', 'Cannot select an inactive profile'); return false; } if (isChecked) { if (this.selectedProfiles.length >= this.maxProfileSelection) { event.preventDefault(); event.target.checked = false; this.showDialog('warning', 'Selection Limit', 'You can only select up to ' + this.maxProfileSelection + ' profiles at a time.'); return false; } this.selectedProfiles.push(profile); } else { this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id); } },
+        showDialog(type, title, message, confirmText = 'OK') { return new Promise((resolve) => { this.dialog = { show: true, type: type, title: title, message: message, confirmText: confirmText, onConfirm: () => { this.dialog.show = false; resolve(true); }, onCancel: () => { this.dialog.show = false; resolve(false); } }; }); },
+        handleDialogConfirm() { if (this.dialog.onConfirm) this.dialog.onConfirm(); },
+        handleDialogCancel() { if (this.dialog.onCancel) this.dialog.onCancel(); },
+        getDialogIcon(type) { const icons = {'success': 'fas fa-check-circle','error': 'fas fa-times-circle','warning': 'fas fa-exclamation-triangle','info': 'fas fa-info-circle','confirm': 'fas fa-question-circle'}; return icons[type] || icons['info']; },
+        showToast(type, message, duration = 3000) { this.toast = { show: true, type: type, message: message }; setTimeout(() => { this.toast.show = false; }, duration); },
+        getToastIcon(type) { const icons = {'success': 'fas fa-check-circle','error': 'fas fa-times-circle','warning': 'fas fa-exclamation-triangle','info': 'fas fa-info-circle'}; return icons[type] || icons['info']; },
+        getToastColor(type) { const colors = {'success': 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)','error': 'linear-gradient(135deg, #f56565 0%, #e53e3e 100%)','warning': 'linear-gradient(135deg, #ed8936 0%, #dd6b20 100%)','info': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)','confirm': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}; return colors[type] || colors['info']; },
+        resetForm() { this.newListing = { Year: '', Make: '', Model: '', Mileage: '', Price: '', 'Body Style': '', 'Exterior Color': '', 'Interior Color': '', 'Vehicle Condition': '', 'Fuel Type': '', Transmission: '', Description: '', 'Images Path': '', 'selectedDay': '', image_ids: [], image_folder: '' }; this.showToast('info', 'Form reset'); },
+        addListing() { axios.post('/add_listing', this.newListing).then(response => { if (response.data.status === 'success') { this.resetForm(); this.showDialog('success', 'Success!', 'Listing added!'); this.loadListings(); } else { this.showDialog('error', 'Error', response.data.message || 'Failed to add listing.'); } }).catch(error => { this.showDialog('error', 'Error', error.response?.data?.message || 'Failed to add listing.'); }); },
+        editListing(listingId) { const listing = this.listings.find(l => l.id === listingId); if (!listing) { this.showToast('error', 'Listing not found'); return; } this.editingListing = listingId; this.editForm = JSON.parse(JSON.stringify(listing)); },
+        cancelEdit() { this.editingListing = null; this.editForm = {}; },
+        updateListing() { if (!this.editForm.id) { this.showToast('error', 'No listing ID found'); return; } axios.post('/update_listing', this.editForm).then(response => { if (response.data.status === 'success') { this.cancelEdit(); this.showDialog('success', 'Updated!', 'Listing updated!'); this.loadListings(); } else { this.showDialog('error', 'Error', response.data.message || 'Failed to update listing.'); } }).catch(error => { this.showDialog('error', 'Error', error.response?.data?.message || 'Failed to update listing.'); }); },
+        async confirmDelete(listingId) { if (!listingId && listingId !== 0) { this.showToast('error', 'Invalid listing ID'); return; } const confirmed = await this.showDialog('confirm', 'Confirm Delete', 'Delete this listing?', 'Delete'); if (!confirmed) return; try { const response = await axios.post('/delete_listing', { index: listingId }); if (response.data.status === 'success') { this.showToast('success', 'Listing moved to deleted listings'); this.listings = this.listings.filter(l => l.id !== listingId); this.selectedListings = this.selectedListings.filter(id => id !== listingId); if (this.activeTab === 'deleted') { this.loadDeletedListings(); } } else { this.showToast('error', response.data.message || 'Failed to delete listing'); } } catch (error) { this.showDialog('error', 'Error', error.response?.data?.message || 'Failed to delete listing'); } },
+        toggleAllListings(event) { if (event.target.checked) { this.selectedListings = this.listings.map(listing => listing.id); } else { this.selectedListings = []; } },
+        loadListings() { axios.get('/get_listings').then(response => { if (response.data.status === 'success') { this.listings = response.data.listings; } else { this.showToast('error', 'Failed to load listings'); } }).catch(error => { this.showToast('error', 'Failed to load listings'); }); },

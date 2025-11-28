@@ -1,0 +1,269 @@
+        // ========================================================================
+        // BOT MANAGEMENT METHODS - NEW
+        // ========================================================================
+        
+        async runBot() {
+            if (!this.hasSelections) {
+                await this.showDialog('warning', 'No Selection', 'Please select profiles and listings.');
+                return;
+            }
+            
+            const confirmed = await this.showDialog('confirm', 'Launch Bot', 
+                `Ready to post ${this.selectedListings.length} listing(s) with ${this.selectedProfiles.length} profile(s)?`, 'Launch');
+            if (!confirmed) return;
+
+            this.isRunning = true;
+            this.logs = 'Initializing bot...\n';
+            this.showToast('info', 'Bot starting...');
+            
+            const listingsData = this.selectedListings.map(index => ({
+                ...this.listings.find(l => l.id === index),
+                selectedDay: this.listings.find(l => l.id === index)?.selectedDay
+            }));
+            
+            try {
+                const response = await axios.post('/run_bot', {
+                    profiles: this.selectedProfiles,
+                    listings: this.selectedListings,
+                    listingsData: listingsData
+                });
+                
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Bot started successfully!');
+                    this.logs += 'Bot started with PID: ' + response.data.pid + '\n';
+                    
+                    // Start polling for status
+                    this.startBotStatusPolling();
+                } else {
+                    this.showDialog('error', 'Bot Error', response.data.message || 'Failed to start bot');
+                    this.isRunning = false;
+                }
+            } catch (error) {
+                const errorMsg = error.response?.data?.message || 'An error occurred';
+                this.logs += '\nError: ' + errorMsg;
+                this.showDialog('error', 'Bot Error', errorMsg);
+                this.isRunning = false;
+            }
+        },
+        
+        async stopBot() {
+            const confirmed = await this.showDialog('confirm', 'Stop Bot', 
+                'Are you sure you want to stop the bot? Current operation will be completed first.', 'Stop Bot');
+            if (!confirmed) return;
+            
+            this.stoppingBot = true;
+            this.showToast('info', 'Stopping bot...');
+            
+            try {
+                const response = await axios.post('/stop_bot');
+                
+                if (response.data.status === 'success') {
+                    this.showToast('success', response.data.message);
+                    this.logs += '\n⚠️ Bot stop requested\n';
+                } else {
+                    this.showToast('warning', response.data.message);
+                }
+            } catch (error) {
+                console.error('Error stopping bot:', error);
+                this.showToast('error', 'Failed to stop bot');
+            } finally {
+                // Keep polling to see when it actually stops
+                setTimeout(() => {
+                    this.stoppingBot = false;
+                }, 3000);
+            }
+        },
+        
+        startBotStatusPolling() {
+            // Clear any existing interval
+            if (this.botStatusInterval) {
+                clearInterval(this.botStatusInterval);
+            }
+            
+            // Poll every 2 seconds
+            this.botStatusInterval = setInterval(() => {
+                this.fetchBotStatus();
+            }, 2000);
+            
+            // Also fetch immediately
+            this.fetchBotStatus();
+        },
+        
+        stopBotStatusPolling() {
+            if (this.botStatusInterval) {
+                clearInterval(this.botStatusInterval);
+                this.botStatusInterval = null;
+            }
+        },
+        
+        async fetchBotStatus() {
+            try {
+                const response = await axios.get('/bot_status');
+                
+                if (response.data.status === 'success') {
+                    // Update bot status
+                    this.botStatus = {
+                        ...this.botStatus,
+                        ...response.data
+                    };
+                    
+                    // Update logs if available
+                    if (response.data.message) {
+                        // Only add if different from last message
+                        const lastLine = this.logs.split('\n').filter(l => l.trim()).pop();
+                        if (!lastLine || !lastLine.includes(response.data.message)) {
+                            this.logs += `[${response.data.status}] ${response.data.message}\n`;
+                        }
+                    }
+                    
+                    // Check if bot finished
+                    if (!response.data.process_running) {
+                        this.isRunning = false;
+                        this.stopBotStatusPolling();
+                        
+                        // Show completion message
+                        if (response.data.status === 'completed') {
+                            const results = response.data.results || {};
+                            this.showDialog('success', 'Bot Completed!', 
+                                `Successfully posted: ${results.success || 0}\nFailed: ${results.failed || 0}\nSkipped: ${results.skipped || 0}`);
+                            this.loadScreenshots();
+                        } else if (response.data.status === 'stopped') {
+                            this.showDialog('warning', 'Bot Stopped', 'Bot was stopped by user');
+                        } else if (response.data.status === 'error') {
+                            this.showDialog('error', 'Bot Error', response.data.message || 'An error occurred');
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching bot status:', error);
+            }
+        },
+        
+        async loadBotConfig() {
+            try {
+                const response = await axios.get('/bot_config');
+                if (response.data.status === 'success') {
+                    this.botConfig = {
+                        ...this.defaultBotConfig,
+                        ...response.data.config
+                    };
+                    // Ensure delays object is complete
+                    this.botConfig.delays = {
+                        ...this.defaultBotConfig.delays,
+                        ...response.data.config.delays
+                    };
+                }
+            } catch (error) {
+                console.error('Error loading bot config:', error);
+            }
+        },
+        
+        async saveBotConfig() {
+            try {
+                const response = await axios.post('/bot_config', this.botConfig);
+                
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Settings saved!');
+                    this.showBotSettings = false;
+                } else {
+                    this.showToast('error', response.data.message || 'Failed to save settings');
+                }
+            } catch (error) {
+                console.error('Error saving bot config:', error);
+                this.showToast('error', 'Failed to save settings');
+            }
+        },
+        
+        resetBotConfig() {
+            this.botConfig = JSON.parse(JSON.stringify(this.defaultBotConfig));
+            this.showToast('info', 'Settings reset to defaults');
+        },
+        
+        applyPreset(preset) {
+            switch (preset) {
+                case 'fast':
+                    this.botConfig.delays = {
+                        between_listings: 3,
+                        between_profiles: 5,
+                        after_publish: 3,
+                        page_load: 3,
+                        element_wait: 1,
+                        group_selection: 0.5
+                    };
+                    this.showToast('info', 'Fast preset applied - use with caution!');
+                    break;
+                case 'balanced':
+                    this.botConfig.delays = {
+                        between_listings: 5,
+                        between_profiles: 10,
+                        after_publish: 5,
+                        page_load: 4,
+                        element_wait: 2,
+                        group_selection: 1
+                    };
+                    this.showToast('info', 'Balanced preset applied');
+                    break;
+                case 'safe':
+                    this.botConfig.delays = {
+                        between_listings: 10,
+                        between_profiles: 20,
+                        after_publish: 8,
+                        page_load: 6,
+                        element_wait: 3,
+                        group_selection: 2
+                    };
+                    this.showToast('info', 'Safe preset applied - slower but safer');
+                    break;
+            }
+        },
+        
+        async loadScreenshots() {
+            try {
+                const response = await axios.get('/screenshots');
+                if (response.data.status === 'success') {
+                    this.screenshots = response.data.screenshots;
+                }
+            } catch (error) {
+                console.error('Error loading screenshots:', error);
+            }
+        },
+        
+        viewScreenshot(screenshot) {
+            window.open('/screenshots/' + screenshot.filename, '_blank');
+        },
+        
+        async clearScreenshots() {
+            const confirmed = await this.showDialog('confirm', 'Clear Screenshots', 
+                `Delete all ${this.screenshots.length} screenshots?`, 'Delete All');
+            if (!confirmed) return;
+            
+            try {
+                const response = await axios.post('/screenshots/clear');
+                if (response.data.status === 'success') {
+                    this.showToast('success', response.data.message);
+                    this.screenshots = [];
+                }
+            } catch (error) {
+                console.error('Error clearing screenshots:', error);
+                this.showToast('error', 'Failed to clear screenshots');
+            }
+        },
+        
+        async resetBotState() {
+            try {
+                const response = await axios.post('/reset_bot_state');
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Bot state reset');
+                    this.botStatus = {
+                        status: 'idle',
+                        message: '',
+                        progress: 0,
+                        process_running: false
+                    };
+                    this.isRunning = false;
+                    this.stoppingBot = false;
+                }
+            } catch (error) {
+                console.error('Error resetting bot state:', error);
+            }
+        },

@@ -1,5 +1,5 @@
-        // ========================================================================
-        // BOT METHODS
+// ========================================================================
+        // BOT CONTROL METHODS
         // ========================================================================
         async runBot() {
             if (!this.hasSelections) {
@@ -13,33 +13,327 @@
 
             this.isRunning = true;
             this.logs = 'Initializing bot...\n';
-            this.showToast('info', 'Bot started!');
+            this.showToast('info', 'Bot starting...');
             
             const listingsData = this.selectedListings.map(index => ({
                 ...this.listings[index],
                 selectedDay: this.listings[index].selectedDay
             }));
             
-            axios.post('/run_bot', {
-                profiles: this.selectedProfiles,
-                listings: this.selectedListings,
-                listingsData: listingsData
-            })
-            .then(response => {
-                this.logs += response.data.stdout;
-                if (response.data.stderr) {
-                    this.logs += '\nErrors:\n' + response.data.stderr;
+            try {
+                const response = await axios.post('/run_bot', {
+                    profiles: this.selectedProfiles,
+                    listings: this.selectedListings,
+                    listingsData: listingsData
+                });
+                
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Bot started successfully!');
+                    // Start polling for status
+                    this.startBotStatusPolling();
+                } else {
+                    this.showDialog('error', 'Error', response.data.message || 'Failed to start bot');
+                    this.isRunning = false;
                 }
-                this.showDialog('success', 'Complete!', 'Bot execution completed!');
-            })
-            .catch(error => {
+            } catch (error) {
                 const errorMsg = error.response?.data?.message || 'An error occurred';
                 this.logs += '\nError: ' + errorMsg;
                 this.showDialog('error', 'Bot Error', errorMsg);
-            })
-            .finally(() => {
                 this.isRunning = false;
-            });
+            }
+        },
+
+        async stopBot() {
+            const confirmed = await this.showDialog('confirm', 'Stop Bot', 
+                'Are you sure you want to stop the bot? The current action will be completed first.', 'Stop Bot');
+            if (!confirmed) return;
+            
+            this.stoppingBot = true;
+            this.showToast('info', 'Sending stop signal...');
+            
+            try {
+                const response = await axios.post('/stop_bot');
+                
+                if (response.data.status === 'success') {
+                    this.showToast('success', response.data.message || 'Stop signal sent');
+                    this.logs += '\n--- Stop signal sent ---\n';
+                } else {
+                    this.showToast('warning', response.data.message || 'Could not stop bot');
+                }
+            } catch (error) {
+                console.error('Error stopping bot:', error);
+                this.showToast('error', 'Failed to send stop signal');
+            } finally {
+                // Keep stoppingBot true until status shows stopped
+                setTimeout(() => {
+                    this.stoppingBot = false;
+                }, 3000);
+            }
+        },
+
+        startBotStatusPolling() {
+            // Clear any existing interval
+            if (this.botStatusInterval) {
+                clearInterval(this.botStatusInterval);
+            }
+            
+            // Poll every 2 seconds
+            this.botStatusInterval = setInterval(() => {
+                this.fetchBotStatus();
+            }, 2000);
+            
+            // Fetch immediately
+            this.fetchBotStatus();
+        },
+
+        stopBotStatusPolling() {
+            if (this.botStatusInterval) {
+                clearInterval(this.botStatusInterval);
+                this.botStatusInterval = null;
+            }
+        },
+
+        async fetchBotStatus() {
+            try {
+                const response = await axios.get('/bot_status');
+                
+                if (response.data.status === 'success') {
+                    this.botStatus = response.data;
+                    
+                    // Update logs with message
+                    if (response.data.message && response.data.message !== this.lastBotMessage) {
+                        this.logs += response.data.message + '\n';
+                        this.lastBotMessage = response.data.message;
+                    }
+                    
+                    // Check if bot has finished
+                    if (!response.data.process_running) {
+                        this.stopBotStatusPolling();
+                        this.isRunning = false;
+                        this.stoppingBot = false;
+                        
+                        if (response.data.status === 'completed') {
+                            this.showDialog('success', 'Complete!', 'Bot execution completed successfully!');
+                        } else if (response.data.status === 'stopped') {
+                            this.showDialog('info', 'Stopped', 'Bot was stopped by user.');
+                        } else if (response.data.status === 'error') {
+                            this.showDialog('error', 'Error', response.data.message || 'Bot encountered an error.');
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching bot status:', error);
+                // Don't stop polling on error - might be temporary
+            }
+        },
+
+        // ========================================================================
+        // BOT CONFIGURATION METHODS
+        // ========================================================================
+        async loadBotConfig() {
+            try {
+                const response = await axios.get('/bot_config');
+                if (response.data.status === 'success') {
+                    this.botConfig = response.data.config;
+                }
+            } catch (error) {
+                console.error('Error loading bot config:', error);
+            }
+        },
+
+        async saveBotConfig() {
+            try {
+                const response = await axios.post('/bot_config', this.botConfig);
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Settings saved!');
+                    this.showBotSettings = false;
+                } else {
+                    this.showToast('error', response.data.message || 'Failed to save settings');
+                }
+            } catch (error) {
+                console.error('Error saving bot config:', error);
+                this.showToast('error', 'Failed to save settings');
+            }
+        },
+
+        applyPreset(preset) {
+            const presets = {
+                'fast': {
+                    between_listings: 3,
+                    between_profiles: 5,
+                    after_publish: 3,
+                    page_load: 3,
+                    element_wait: 1,
+                    group_selection: 0.5
+                },
+                'balanced': {
+                    between_listings: 5,
+                    between_profiles: 10,
+                    after_publish: 5,
+                    page_load: 4,
+                    element_wait: 2,
+                    group_selection: 1
+                },
+                'safe': {
+                    between_listings: 10,
+                    between_profiles: 20,
+                    after_publish: 8,
+                    page_load: 6,
+                    element_wait: 3,
+                    group_selection: 2
+                }
+            };
+            
+            if (presets[preset]) {
+                this.botConfig.delays = { ...presets[preset] };
+                this.showToast('info', `Applied ${preset} preset`);
+            }
+        },
+
+        resetBotConfig() {
+            this.botConfig = JSON.parse(JSON.stringify(this.defaultBotConfig));
+            this.showToast('info', 'Settings reset to defaults');
+        },
+
+        // ========================================================================
+        // SCREENSHOT METHODS
+        // ========================================================================
+        async loadScreenshots() {
+            try {
+                const response = await axios.get('/screenshots');
+                if (response.data.status === 'success') {
+                    this.screenshots = response.data.screenshots;
+                }
+            } catch (error) {
+                console.error('Error loading screenshots:', error);
+            }
+        },
+
+        viewScreenshot(screenshot) {
+            window.open('/screenshots/' + screenshot.filename, '_blank');
+        },
+
+        async clearScreenshots() {
+            const confirmed = await this.showDialog('confirm', 'Clear Screenshots', 
+                'Delete all screenshots? This cannot be undone.', 'Clear All');
+            if (!confirmed) return;
+            
+            try {
+                const response = await axios.post('/screenshots/clear');
+                if (response.data.status === 'success') {
+                    this.showToast('success', response.data.message);
+                    this.screenshots = [];
+                }
+            } catch (error) {
+                this.showToast('error', 'Failed to clear screenshots');
+            }
+        },
+
+        async resetBotState() {
+            const confirmed = await this.showDialog('confirm', 'Reset Bot State', 
+                'This will clear all bot state files. Use this if the bot is stuck.', 'Reset');
+            if (!confirmed) return;
+            
+            try {
+                const response = await axios.post('/reset_bot_state');
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Bot state reset');
+                    this.botStatus = {
+                        status: 'idle',
+                        message: '',
+                        progress: 0,
+                        process_running: false,
+                        current_profile: '',
+                        current_listing: '',
+                        current_profile_idx: 0,
+                        current_listing_idx: 0,
+                        total_profiles: 0,
+                        total_listings: 0
+                    };
+                    this.isRunning = false;
+                    this.stoppingBot = false;
+                }
+            } catch (error) {
+                this.showToast('error', 'Failed to reset bot state');
+            }
+        },
+
+        // ========================================================================
+        // BOT ACTIVITIES METHODS
+        // ========================================================================
+        getBotStatusColor(status) {
+            const colors = {
+                'idle': '#48bb78',
+                'starting': '#667eea',
+                'running': '#f59e0b',
+                'completed': '#48bb78',
+                'stopped': '#718096',
+                'error': '#f56565'
+            };
+            return colors[status] || '#718096';
+        },
+        
+        getBotStatusText(status) {
+            const texts = {
+                'idle': 'Idle',
+                'starting': 'Starting...',
+                'running': 'Running',
+                'completed': 'Completed',
+                'stopped': 'Stopped',
+                'error': 'Error'
+            };
+            return texts[status] || status || 'Idle';
+        },
+        
+        getListingById(id) {
+            return this.listings.find(l => l.id === id);
+        },
+        
+        clearLogs() {
+            this.logs = '';
+            this.showToast('info', 'Logs cleared');
+        },
+        
+        copyLogs() {
+            if (this.logs) {
+                navigator.clipboard.writeText(this.logs).then(() => {
+                    this.showToast('success', 'Logs copied to clipboard');
+                }).catch(() => {
+                    this.showToast('error', 'Failed to copy logs');
+                });
+            } else {
+                this.showToast('info', 'No logs to copy');
+            }
+        },
+        
+        async loadBotActivityHistory() {
+            try {
+                // Load from upload history as activity
+                const response = await axios.get('/upload_history', { 
+                    params: { page: 1, page_size: 20 } 
+                });
+                
+                if (response.data.uploads) {
+                    this.botActivityHistory = response.data.uploads.map(upload => ({
+                        id: upload.id,
+                        timestamp: upload.upload_datetime,
+                        profile_name: upload.profile_name,
+                        vehicle_info: upload.vehicle_info ? 
+                            `${upload.vehicle_info.year} ${upload.vehicle_info.make} ${upload.vehicle_info.model}` : 
+                            'Unknown',
+                        action: 'Post',
+                        status: upload.status,
+                        duration: upload.duration || null
+                    }));
+                    
+                    // Update stats
+                    this.botActivityStats.total_runs = response.data.total || 0;
+                    this.botActivityStats.successful = response.data.stats?.success || 0;
+                    this.botActivityStats.failed = response.data.stats?.failed || 0;
+                }
+            } catch (error) {
+                console.error('Error loading bot activity history:', error);
+            }
         },
 
         // ========================================================================

@@ -155,6 +155,8 @@
     },
 
     mounted() {
+        console.log('🚀 FB Marketplace Bot Dashboard Loaded');
+        
         // Load Edge profiles on startup
         this.loadProfiles();
         
@@ -162,10 +164,31 @@
         if (this.uploadHistory.length === 0) {
             this.loadUploadHistory();
         }
+        
         // Load cached notifications
         this.loadAllNotifications();
+        
         // Load deleted listings on startup
         this.loadDeletedListings();
+        
+        // ========================================
+        // BOT MANAGEMENT - LOAD CONFIG & CHECK STATUS
+        // ========================================
+        this.loadBotConfig();
+        this.fetchBotStatus();
+        
+        // If bot is running, start polling
+        setTimeout(() => {
+            if (this.botStatus.process_running) {
+                this.isRunning = true;
+                this.startBotStatusPolling();
+            }
+        }, 1000);
+    },
+    
+    beforeDestroy() {
+        // Clean up polling interval
+        this.stopBotStatusPolling();
     }
 });
 </script>

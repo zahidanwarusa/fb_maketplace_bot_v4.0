@@ -1,101 +1,26 @@
 <!-- Add Listing Tab Component -->
 <div v-if="activeTab === 'add-listing'">
     <div class="card" style="max-width: 900px; margin: 0 auto;">
-        <div class="card-header">
-            <div class="card-title">Add New Vehicle Listing</div>
-        </div>
+        <div class="card-header"><div class="card-title">Add New Vehicle Listing</div></div>
         <form @submit.prevent="addListing">
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px;">
-                <div>
-                    <label>Year</label>
-                    <input v-model.number="newListing.Year" type="number" required placeholder="2024">
-                </div>
-                <div>
-                    <label>Make</label>
-                    <select v-model="newListing.Make" required>
-                        <option value="">Select Make</option>
-                        <option v-for="make in makeOptions" :key="make" :value="make">[[ make ]]</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Model</label>
-                    <input v-model="newListing.Model" type="text" required placeholder="Civic">
-                </div>
-                <div>
-                    <label>Mileage</label>
-                    <input v-model.number="newListing.Mileage" type="number" required placeholder="50000">
-                </div>
-                <div>
-                    <label>Price</label>
-                    <input v-model.number="newListing.Price" type="number" required placeholder="15000">
-                </div>
-                <div>
-                    <label>Body Style</label>
-                    <select v-model="newListing['Body Style']" required>
-                        <option value="">Select Style</option>
-                        <option v-for="style in bodyStyles" :key="style" :value="style">[[ style ]]</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Exterior Color</label>
-                    <select v-model="newListing['Exterior Color']" required>
-                        <option value="">Select Color</option>
-                        <option v-for="color in colorOptions" :key="color" :value="color">[[ color ]]</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Interior Color</label>
-                    <select v-model="newListing['Interior Color']" required>
-                        <option value="">Select Color</option>
-                        <option v-for="color in colorOptions" :key="color" :value="color">[[ color ]]</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Condition</label>
-                    <select v-model="newListing['Vehicle Condition']" required>
-                        <option value="">Select Condition</option>
-                        <option v-for="condition in conditions" :key="condition" :value="condition">[[ condition ]]</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Fuel Type</label>
-                    <select v-model="newListing['Fuel Type']" required>
-                        <option value="">Select Fuel</option>
-                        <option v-for="fuel in fuelTypes" :key="fuel" :value="fuel">[[ fuel ]]</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Transmission</label>
-                    <select v-model="newListing.Transmission" required>
-                        <option value="">Select Transmission</option>
-                        <option value="Manual transmission">Manual</option>
-                        <option value="Automatic transmission">Automatic</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Images Path</label>
-                    <div style="display: flex; gap: 8px;">
-                        <input v-model="newListing['Images Path']" type="text" required placeholder="Enter folder path or upload files" style="flex: 1;">
-                        <button type="button" @click="openMediaPicker('new')" class="btn btn-primary" style="padding: 10px 16px;" title="Browse Drive">
-                            <i class="fas fa-folder-open"></i>
-                        </button>
-                        <button type="button" @click="openFileUpload('new')" class="btn btn-success" style="padding: 10px 16px;" title="Upload Files">
-                            <i class="fas fa-upload"></i>
-                        </button>
-                    </div>
-                </div>
+                <div><label>Year</label><input v-model.number="newListing.Year" type="number" required placeholder="2024"></div>
+                <div><label>Make</label><select v-model="newListing.Make" required><option value="">Select Make</option><option v-for="make in makeOptions" :key="make" :value="make">[[ make ]]</option></select></div>
+                <div><label>Model</label><input v-model="newListing.Model" type="text" required placeholder="Civic"></div>
+                <div><label>Mileage</label><input v-model.number="newListing.Mileage" type="number" required placeholder="50000"></div>
+                <div><label>Price</label><input v-model.number="newListing.Price" type="number" required placeholder="15000"></div>
+                <div><label>Body Style</label><select v-model="newListing['Body Style']" required><option value="">Select Style</option><option v-for="style in bodyStyles" :key="style" :value="style">[[ style ]]</option></select></div>
+                <div><label>Exterior Color</label><select v-model="newListing['Exterior Color']" required><option value="">Select Color</option><option v-for="color in colorOptions" :key="color" :value="color">[[ color ]]</option></select></div>
+                <div><label>Interior Color</label><select v-model="newListing['Interior Color']" required><option value="">Select Color</option><option v-for="color in colorOptions" :key="color" :value="color">[[ color ]]</option></select></div>
+                <div><label>Condition</label><select v-model="newListing['Vehicle Condition']" required><option value="">Select Condition</option><option v-for="condition in conditions" :key="condition" :value="condition">[[ condition ]]</option></select></div>
+                <div><label>Fuel Type</label><select v-model="newListing['Fuel Type']" required><option value="">Select Fuel</option><option v-for="fuel in fuelTypes" :key="fuel" :value="fuel">[[ fuel ]]</option></select></div>
+                <div><label>Transmission</label><select v-model="newListing.Transmission" required><option value="">Select</option><option value="Manual transmission">Manual</option><option value="Automatic transmission">Automatic</option></select></div>
+                <div><label>Images Path</label><div style="display: flex; gap: 8px;"><input v-model="newListing['Images Path']" type="text" required placeholder="Enter folder path" style="flex: 1;"><button type="button" @click="openMediaPicker('new')" class="btn btn-primary" style="padding: 10px 16px;"><i class="fas fa-folder-open"></i></button><button type="button" @click="openFileUpload('new')" class="btn btn-success" style="padding: 10px 16px;"><i class="fas fa-upload"></i></button></div></div>
             </div>
-            <div style="margin-bottom: 20px;">
-                <label>Description</label>
-                <textarea v-model="newListing.Description" rows="4" required placeholder="Enter detailed vehicle description..."></textarea>
-            </div>
+            <div style="margin-bottom: 20px;"><label>Description</label><textarea v-model="newListing.Description" rows="4" required placeholder="Enter detailed vehicle description..."></textarea></div>
             <div style="display: flex; justify-content: flex-end; gap: 12px;">
-                <button type="button" @click="resetForm" class="btn btn-secondary">
-                    <i class="fas fa-redo"></i> Reset
-                </button>
-                <button type="submit" class="btn btn-success" style="padding: 12px 32px;">
-                    <i class="fas fa-plus-circle"></i> Add Listing
-                </button>
+                <button type="button" @click="resetForm" class="btn btn-secondary"><i class="fas fa-redo"></i> Reset</button>
+                <button type="submit" class="btn btn-success" style="padding: 12px 32px;"><i class="fas fa-plus-circle"></i> Add Listing</button>
             </div>
         </form>
     </div>

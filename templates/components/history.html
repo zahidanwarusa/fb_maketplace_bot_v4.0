@@ -1,92 +1,29 @@
 <!-- History Tab Component -->
 <div v-if="activeTab === 'history'">
     <div class="stats-grid" style="margin-bottom: 24px;">
-        <div class="stat-card">
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Successful</div>
-            <div style="font-size: 32px; font-weight: 700; color: #48bb78;">[[ stats.success ]]</div>
-        </div>
-        <div class="stat-card">
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Failed</div>
-            <div style="font-size: 32px; font-weight: 700; color: #f56565;">[[ stats.failed ]]</div>
-        </div>
-        <div class="stat-card">
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Pending</div>
-            <div style="font-size: 32px; font-weight: 700; color: #ed8936;">[[ stats.pending ]]</div>
-        </div>
-        <div class="stat-card">
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Total</div>
-            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ stats.total ]]</div>
-        </div>
+        <div class="stat-card"><div style="color: #718096; font-size: 14px;">Successful</div><div style="font-size: 32px; font-weight: 700; color: #48bb78;">[[ stats.success ]]</div></div>
+        <div class="stat-card"><div style="color: #718096; font-size: 14px;">Failed</div><div style="font-size: 32px; font-weight: 700; color: #f56565;">[[ stats.failed ]]</div></div>
+        <div class="stat-card"><div style="color: #718096; font-size: 14px;">Pending</div><div style="font-size: 32px; font-weight: 700; color: #ed8936;">[[ stats.pending ]]</div></div>
+        <div class="stat-card"><div style="color: #718096; font-size: 14px;">Total</div><div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ stats.total ]]</div></div>
     </div>
-
     <div class="card">
         <div class="card-header">
             <div class="card-title">Upload History</div>
-            <button @click="exportHistory" class="btn btn-success">
-                <i class="fas fa-download"></i> Export
-            </button>
+            <button @click="exportHistory" class="btn btn-success"><i class="fas fa-download"></i> Export</button>
         </div>
-
-        <div v-if="loadingHistory" class="empty-state">
-            <div class="spinner" style="margin: 0 auto 20px;"></div>
-            <p style="font-weight: 600; color: #4a5568;">Loading history...</p>
-        </div>
-
-        <div v-else-if="uploadHistory.length === 0" class="empty-state">
-            <i class="fas fa-inbox"></i>
-            <h3 style="font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No history found</h3>
-            <p>Upload some listings to see them tracked here</p>
-        </div>
-
+        <div v-if="loadingHistory" class="empty-state"><div class="spinner" style="margin: 0 auto 20px;"></div><p>Loading history...</p></div>
+        <div v-else-if="uploadHistory.length === 0" class="empty-state"><i class="fas fa-inbox"></i><h3>No history found</h3></div>
         <div v-else class="table-container">
             <table>
-                <thead>
-                    <tr>
-                        <th>Date & Time</th>
-                        <th>Profile</th>
-                        <th>Facebook Account</th>
-                        <th>Vehicle</th>
-                        <th>Price</th>
-                        <th>Location</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Date & Time</th><th>Profile</th><th>Vehicle</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                     <tr v-for="upload in uploadHistory" :key="upload.id">
-                        <td>
-                            <div style="font-weight: 600; color: #1a202c; font-size: 14px;">[[ formatDate(upload.upload_datetime) ]]</div>
-                            <div style="color: #718096; font-size: 13px;">[[ formatTime(upload.upload_datetime) ]]</div>
-                        </td>
-                        <td>
-                            <div style="font-weight: 600; color: #1a202c;">[[ upload.profile_name ]]</div>
-                            <div style="color: #718096; font-size: 13px;">[[ upload.profile_folder ]]</div>
-                        </td>
-                        <td>
-                            <div v-if="upload.facebook_account_name" style="font-weight: 600; color: #1a202c;">[[ upload.facebook_account_name ]]</div>
-                            <div v-if="upload.facebook_account_email" style="color: #718096; font-size: 13px;">[[ upload.facebook_account_email ]]</div>
-                            <div v-else style="color: #cbd5e0; font-style: italic;">No account tracked</div>
-                        </td>
-                        <td>
-                            <div style="font-weight: 600; color: #1a202c;">
-                                [[ upload.vehicle_info.year ]] [[ upload.vehicle_info.make ]] [[ upload.vehicle_info.model ]]
-                            </div>
-                            <div style="color: #718096; font-size: 13px;">
-                                [[ upload.vehicle_info.mileage?.toLocaleString() ]] mi
-                            </div>
-                        </td>
-                        <td>
-                            <div style="font-size: 18px; font-weight: 700; color: #1a202c;">
-                                $[[ upload.vehicle_info.price?.toLocaleString() ]]
-                            </div>
-                        </td>
-                        <td>[[ upload.location || 'N/A' ]]</td>
+                        <td><div style="font-weight: 600;">[[ formatDate(upload.upload_datetime) ]]</div><div style="color: #718096; font-size: 13px;">[[ formatTime(upload.upload_datetime) ]]</div></td>
+                        <td><div style="font-weight: 600;">[[ upload.profile_name ]]</div></td>
+                        <td><div style="font-weight: 600;">[[ upload.vehicle_info.year ]] [[ upload.vehicle_info.make ]] [[ upload.vehicle_info.model ]]</div></td>
+                        <td style="font-weight: 700;">$[[ upload.vehicle_info.price?.toLocaleString() ]]</td>
                         <td><span :class="'badge badge-' + getStatusType(upload.status)">[[ upload.status ]]</span></td>
-                        <td>
-                            <button @click="viewDetails(upload)" class="btn btn-secondary" style="padding: 8px 12px;">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </td>
+                        <td><button @click="viewDetails(upload)" class="btn btn-secondary" style="padding: 8px 12px;"><i class="fas fa-eye"></i></button></td>
                     </tr>
                 </tbody>
             </table>

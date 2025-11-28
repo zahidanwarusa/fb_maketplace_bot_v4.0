@@ -1,18 +1,26 @@
-<!-- Sidebar Component -->
-<div class="sidebar" :class="{'mobile-open': mobileMenuOpen}">
-    <div class="sidebar-logo">
+<!-- Sidebar Component - With Scrollbar -->
+<div class="sidebar" :class="{'mobile-open': mobileMenuOpen}" style="display: flex; flex-direction: column;">
+    <!-- Logo Header (fixed) -->
+    <div class="sidebar-logo" style="flex-shrink: 0;">
         <div style="display: flex; align-items: center; color: white;">
             <i class="fas fa-car" style="font-size: 28px; margin-right: 12px;"></i>
             <div>
                 <div style="font-size: 18px; font-weight: 700;">FB Marketplace</div>
-                <div style="font-size: 12px; opacity: 0.7;">Automation</div>
+                <div style="font-size: 12px; opacity: 0.7;">Automation v2.0</div>
             </div>
         </div>
     </div>
-    <div class="sidebar-menu">
+    
+    <!-- Scrollable Menu Area -->
+    <div class="sidebar-menu" style="flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: 80px;">
         <div class="menu-item" :class="{'active': activeTab === 'dashboard'}" @click="activeTab = 'dashboard'">
             <i class="fas fa-th-large"></i>
             <span>Dashboard</span>
+        </div>
+        <div class="menu-item" :class="{'active': activeTab === 'bot-activities'}" @click="activeTab = 'bot-activities'; loadScreenshots(); loadBotActivityHistory();">
+            <i class="fas fa-robot"></i>
+            <span>Bot Activities</span>
+            <span v-if="botStatus.process_running" style="margin-left: auto; width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; animation: pulse 1s infinite;"></span>
         </div>
         <div class="menu-item" :class="{'active': activeTab === 'profiles'}" @click="activeTab = 'profiles'; loadProfiles()">
             <i class="fab fa-edge"></i>
@@ -43,4 +51,58 @@
             <span>Schedule</span>
         </div>
     </div>
+    
+    <!-- Bot Status Footer (fixed at bottom) -->
+    <div style="flex-shrink: 0; padding: 16px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.1);">
+        <div v-if="botStatus.process_running" 
+             @click="activeTab = 'bot-activities'"
+             style="display: flex; align-items: center; gap: 8px; color: white; cursor: pointer;"
+             title="Click to view Bot Activities">
+            <div class="spinner" style="width: 16px; height: 16px; border-width: 2px; border-color: rgba(255,255,255,0.3); border-top-color: #fbbf24;"></div>
+            <div style="flex: 1;">
+                <div style="font-size: 12px; font-weight: 600;">Bot Running</div>
+                <div style="font-size: 11px; opacity: 0.7;">[[ botStatus.progress || 0 ]]% complete</div>
+            </div>
+            <i class="fas fa-chevron-right" style="font-size: 10px; opacity: 0.5;"></i>
+        </div>
+        <div v-else style="display: flex; align-items: center; gap: 10px; color: rgba(255,255,255,0.7);">
+            <span style="width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"
+                  :style="botStatus.status === 'error' ? 'background: #f87171;' : 'background: #4ade80;'"></span>
+            <span style="font-size: 13px; font-weight: 500;">
+                [[ botStatus.status === 'error' ? 'Error' : 'Bot Ready' ]]
+            </span>
+        </div>
+    </div>
 </div>
+
+<style>
+/* Sidebar Scrollbar Styling */
+.sidebar-menu::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar-menu::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Firefox scrollbar */
+.sidebar-menu {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+</style>

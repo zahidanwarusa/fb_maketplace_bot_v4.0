@@ -1,4 +1,4 @@
-<!-- Top Bar Component -->
+<!-- Top Bar Component - Simplified (Bot controls moved to Bot Activities tab) -->
 <div class="top-bar">
     <div>
         <h1 style="font-size: 24px; font-weight: 700; color: #1a202c; margin-bottom: 4px;">
@@ -7,13 +7,24 @@
         <p style="color: #718096; font-size: 14px;">[[ getPageSubtitle() ]]</p>
     </div>
     <div style="display: flex; align-items: center; gap: 16px;">
-        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #f0fdf4; border-radius: 8px;">
-            <span class="status-dot active"></span>
+        <!-- Bot Status Indicator (clickable to go to Bot Activities) -->
+        <div v-if="botStatus.process_running" 
+             @click="activeTab = 'bot-activities'"
+             style="display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #fef3c7; border-radius: 8px; border: 1px solid #f59e0b; cursor: pointer; transition: all 0.2s;"
+             title="Click to view Bot Activities">
+            <div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>
+            <div>
+                <span style="font-weight: 600; color: #92400e; font-size: 13px;">Bot Running</span>
+                <span v-if="botStatus.progress" style="color: #a16207; font-size: 12px; margin-left: 6px;">
+                    ([[ botStatus.progress ]]%)
+                </span>
+            </div>
+            <i class="fas fa-external-link-alt" style="color: #a16207; font-size: 10px; margin-left: 4px;"></i>
+        </div>
+        
+        <div v-else style="display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #f0fdf4; border-radius: 8px;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: #4ade80; flex-shrink: 0;"></span>
             <span style="font-weight: 600; color: #166534; font-size: 14px;">System Online</span>
         </div>
-        <button class="btn btn-primary" @click="runBot" :disabled="isRunning || !hasSelections">
-            <i :class="isRunning ? 'fas fa-spinner fa-spin' : 'fas fa-rocket'"></i>
-            [[ isRunning ? 'Running...' : 'Launch Bot' ]]
-        </button>
     </div>
 </div>

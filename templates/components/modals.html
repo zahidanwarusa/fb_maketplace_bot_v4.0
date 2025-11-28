@@ -1,4 +1,4 @@
-<!-- Modals Component - FIXED Media Picker Sizing -->
+<!-- Modals Component - ENHANCED with Bot Settings -->
 
 <!-- Toast Notification -->
 <div v-if="toast.show" class="toast">
@@ -23,7 +23,7 @@
                 <i :class="getDialogIcon(dialog.type)" style="font-size: 32px; color: white;"></i>
             </div>
             <h3 style="font-size: 24px; font-weight: 700; color: #1a202c; margin-bottom: 12px;">[[ dialog.title ]]</h3>
-            <p style="color: #718096; margin-bottom: 24px; font-size: 16px;">[[ dialog.message ]]</p>
+            <p style="color: #718096; margin-bottom: 24px; font-size: 16px; white-space: pre-line;">[[ dialog.message ]]</p>
             <div style="display: flex; gap: 12px; justify-content: center;">
                 <button v-if="dialog.type === 'confirm'" @click="handleDialogCancel" class="btn btn-secondary">
                     Cancel
@@ -36,7 +36,199 @@
     </div>
 </div>
 
-<!-- Media Picker Modal - FIXED SIZING -->
+<!-- Bot Settings Modal -->
+<div v-if="showBotSettings" class="fixed inset-0 modal-overlay flex items-center justify-center z-50" @click="showBotSettings = false">
+    <div class="modal-content" style="padding: 24px; max-width: 600px; width: 95%;" @click.stop>
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid #e2e8f0;">
+            <h3 style="font-size: 20px; font-weight: 700; color: #1a202c;">
+                <i class="fas fa-cog" style="color: #667eea; margin-right: 10px;"></i>
+                Bot Settings
+            </h3>
+            <button @click="showBotSettings = false" style="background: none; border: none; color: #718096; cursor: pointer; font-size: 20px;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <!-- Settings Form -->
+        <div style="margin-bottom: 24px;">
+            <!-- Delay Settings -->
+            <h4 style="font-weight: 600; color: #4a5568; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-clock" style="color: #ed8936;"></i>
+                Timing & Delays (seconds)
+            </h4>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px;">
+                <div>
+                    <label style="font-size: 13px;">Between Listings</label>
+                    <input type="number" v-model.number="botConfig.delays.between_listings" min="1" max="60" style="padding: 8px 12px;">
+                    <small style="color: #a0aec0; font-size: 11px;">Delay between posting different listings</small>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">Between Profiles</label>
+                    <input type="number" v-model.number="botConfig.delays.between_profiles" min="5" max="120" style="padding: 8px 12px;">
+                    <small style="color: #a0aec0; font-size: 11px;">Delay when switching profiles</small>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">After Publish</label>
+                    <input type="number" v-model.number="botConfig.delays.after_publish" min="2" max="30" style="padding: 8px 12px;">
+                    <small style="color: #a0aec0; font-size: 11px;">Wait after clicking publish</small>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">Page Load</label>
+                    <input type="number" v-model.number="botConfig.delays.page_load" min="2" max="20" style="padding: 8px 12px;">
+                    <small style="color: #a0aec0; font-size: 11px;">Wait for page to load</small>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">Element Wait</label>
+                    <input type="number" v-model.number="botConfig.delays.element_wait" min="1" max="10" style="padding: 8px 12px;">
+                    <small style="color: #a0aec0; font-size: 11px;">Wait between interactions</small>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">Group Selection</label>
+                    <input type="number" v-model.number="botConfig.delays.group_selection" min="0" max="5" style="padding: 8px 12px;">
+                    <small style="color: #a0aec0; font-size: 11px;">Delay between selecting groups</small>
+                </div>
+            </div>
+            
+            <!-- Group Settings -->
+            <h4 style="font-weight: 600; color: #4a5568; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-users" style="color: #48bb78;"></i>
+                Posting Options
+            </h4>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px;">
+                <div>
+                    <label style="font-size: 13px;">Max Groups to Select</label>
+                    <input type="number" v-model.number="botConfig.max_groups" min="1" max="50" style="padding: 8px 12px;">
+                    <small style="color: #a0aec0; font-size: 11px;">Maximum Facebook groups to cross-post</small>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">Max Retries on Failure</label>
+                    <input type="number" v-model.number="botConfig.max_retries" min="0" max="5" style="padding: 8px 12px;">
+                    <small style="color: #a0aec0; font-size: 11px;">Retry failed listings (0 = no retry)</small>
+                </div>
+            </div>
+            
+            <!-- Toggle Options -->
+            <h4 style="font-weight: 600; color: #4a5568; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-toggle-on" style="color: #667eea;"></i>
+                Advanced Options
+            </h4>
+            
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 12px; background: #f7fafc; border-radius: 8px;">
+                    <input type="checkbox" v-model="botConfig.auto_retry" class="custom-checkbox">
+                    <div>
+                        <span style="font-weight: 600; color: #1a202c;">Auto-Retry Failed Listings</span>
+                        <div style="font-size: 12px; color: #718096;">Automatically retry listings that fail on first attempt</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+        
+        <!-- Preset Buttons -->
+        <div style="margin-bottom: 20px; padding: 16px; background: #f0fdf4; border-radius: 8px; border: 1px solid #86efac;">
+            <h5 style="font-weight: 600; color: #166534; margin-bottom: 12px;">
+                <i class="fas fa-magic"></i> Quick Presets
+            </h5>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button @click="applyPreset('fast')" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;">
+                    <i class="fas fa-bolt"></i> Fast
+                </button>
+                <button @click="applyPreset('balanced')" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;">
+                    <i class="fas fa-balance-scale"></i> Balanced
+                </button>
+                <button @click="applyPreset('safe')" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;">
+                    <i class="fas fa-shield-alt"></i> Safe (Slow)
+                </button>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div style="display: flex; justify-content: space-between; padding-top: 16px; border-top: 2px solid #e2e8f0;">
+            <button @click="resetBotConfig" class="btn btn-secondary">
+                <i class="fas fa-undo"></i> Reset to Defaults
+            </button>
+            <div style="display: flex; gap: 12px;">
+                <button @click="showBotSettings = false" class="btn btn-secondary">
+                    Cancel
+                </button>
+                <button @click="saveBotConfig" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Screenshots Modal -->
+<div v-if="showScreenshots" class="fixed inset-0 modal-overlay flex items-center justify-center z-50" @click="showScreenshots = false">
+    <div class="modal-content" style="padding: 24px; max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto;" @click.stop>
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid #e2e8f0;">
+            <h3 style="font-size: 20px; font-weight: 700; color: #1a202c;">
+                <i class="fas fa-camera" style="color: #667eea; margin-right: 10px;"></i>
+                Bot Screenshots
+                <span class="badge badge-info" style="margin-left: 10px;">[[ screenshots.length ]]</span>
+            </h3>
+            <div style="display: flex; gap: 12px;">
+                <button @click="loadScreenshots" class="btn btn-secondary" style="padding: 8px 12px;">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button v-if="screenshots.length > 0" @click="clearScreenshots" class="btn btn-danger" style="padding: 8px 12px;">
+                    <i class="fas fa-trash"></i> Clear All
+                </button>
+                <button @click="showScreenshots = false" style="background: none; border: none; color: #718096; cursor: pointer; font-size: 20px;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-if="screenshots.length === 0" class="empty-state" style="padding: 40px;">
+            <i class="fas fa-camera" style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;"></i>
+            <h4 style="font-size: 18px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No Screenshots Yet</h4>
+            <p style="color: #718096;">Screenshots will appear here when the bot runs</p>
+        </div>
+        
+        <!-- Screenshots Grid -->
+        <div v-else style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px;">
+            <div v-for="screenshot in screenshots" :key="screenshot.filename" 
+                 style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden; transition: all 0.2s;"
+                 :style="screenshot.type === 'success' ? 'border-color: #86efac;' : screenshot.type === 'error' ? 'border-color: #fca5a5;' : ''">
+                
+                <!-- Screenshot Preview -->
+                <div style="aspect-ratio: 16/9; background: #f1f3f5; display: flex; align-items: center; justify-content: center; cursor: pointer;"
+                     @click="viewScreenshot(screenshot)">
+                    <img :src="'/screenshots/' + screenshot.filename" 
+                         :alt="screenshot.filename"
+                         style="width: 100%; height: 100%; object-fit: cover;"
+                         @error="$event.target.style.display='none'">
+                </div>
+                
+                <!-- Screenshot Info -->
+                <div style="padding: 12px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <span :class="'badge badge-' + (screenshot.type === 'success' ? 'success' : screenshot.type === 'error' ? 'error' : 'info')"
+                              style="font-size: 10px; padding: 4px 8px;">
+                            [[ screenshot.type ]]
+                        </span>
+                    </div>
+                    <div style="font-size: 12px; color: #1a202c; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                         :title="screenshot.filename">
+                        [[ screenshot.filename ]]
+                    </div>
+                    <div style="font-size: 11px; color: #718096; margin-top: 4px;">
+                        [[ formatDateTime(screenshot.created) ]]
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Media Picker Modal - COMPACT VERSION -->
 <div v-if="showMediaPicker" class="fixed inset-0 modal-overlay flex items-center justify-center z-50" style="padding: 16px;" @click="closeMediaPicker">
     <div class="modal-content" style="padding: 20px; max-width: 900px; width: 95%;" @click.stop>
         <!-- Header -->
@@ -94,7 +286,7 @@
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px;">
                 <div v-for="file in driveFiles" :key="file.id" 
                      @click="selectMediaForPicker(file)"
-                     style="background: white; border: 2px solid #e2e8f0; border-radius: 6px; padding: 6px; cursor: pointer; transition: all 0.15s;"
+                     style="background: white; border: 2px solid #e2e8f0; border-radius: 6px; padding: 6px; cursor: pointer; transition: all 0.15s; position: relative;"
                      :style="pickerSelected && pickerSelected.id === file.id ? 'border-color: #667eea; background: #eef2ff; box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);' : ''"
                      @mouseover="$event.currentTarget.style.borderColor = '#667eea'"
                      @mouseout="$event.currentTarget.style.borderColor = (pickerSelected && pickerSelected.id === file.id) ? '#667eea' : '#e2e8f0'">
