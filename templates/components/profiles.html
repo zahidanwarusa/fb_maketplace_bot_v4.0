@@ -63,42 +63,79 @@
             <p style="color: #718096;">Add your first Edge profile to get started</p>
         </div>
 
-        <div v-else style="display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px;">
-            <div v-for="profile in profiles" :key="profile.id" class="profile-card" :class="{'selected': selectedProfiles.some(p => p.id === profile.id)}" :style="!profile.is_active ? 'opacity: 0.6;' : ''">
-                <div style="display: flex; align-items: start; gap: 12px;">
-                    <input type="checkbox" :checked="selectedProfiles.some(p => p.id === profile.id)" @change="onProfileCheckboxChange($event, profile)" :disabled="!profile.is_active" class="custom-checkbox" style="margin-top: 4px;">
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                                    <i class="fab fa-edge" style="color: white; font-size: 18px;"></i>
+        <!-- LIST VIEW (replaced card grid) -->
+        <div v-else class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 40px;"></th>
+                        <th>Profile Name</th>
+                        <th>Profile Path</th>
+                        <th>Location</th>
+                        <th style="width: 100px;">Status</th>
+                        <th style="width: 140px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="profile in profiles" :key="profile.id" 
+                        :style="[
+                            !profile.is_active ? 'opacity: 0.6;' : '',
+                            selectedProfiles.some(p => p.id === profile.id) ? 'background: #eef2ff;' : ''
+                        ].join(' ')">
+                        <td>
+                            <input 
+                                type="checkbox" 
+                                :checked="selectedProfiles.some(p => p.id === profile.id)" 
+                                @change="onProfileCheckboxChange($event, profile)" 
+                                :disabled="!profile.is_active" 
+                                class="custom-checkbox">
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="width: 32px; height: 32px; background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%); border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    <i class="fab fa-edge" style="color: white; font-size: 14px;"></i>
                                 </div>
-                                <div>
-                                    <div style="font-weight: 600; color: #1a202c; font-size: 16px;">[[ profile.profile_name ]]</div>
-                                    <div style="display: flex; align-items: center; gap: 6px;">
-                                        <span :class="profile.is_active ? 'status-dot active' : 'status-dot inactive'"></span>
-                                        <span style="font-size: 12px; color: #718096;">[[ profile.is_active ? 'Active' : 'Inactive' ]]</span>
-                                    </div>
-                                </div>
+                                <span style="font-weight: 600; color: #1a202c;">[[ profile.profile_name ]]</span>
                             </div>
+                        </td>
+                        <td>
+                            <div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="profile.profile_path">
+                                <span style="color: #718096; font-size: 13px; font-family: monospace;">[[ profile.profile_path ]]</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <input 
+                                    type="text" 
+                                    v-model="profile.location" 
+                                    placeholder="Enter location" 
+                                    @blur="updateProfileLocation(profile)" 
+                                    @keyup.enter="updateProfileLocation(profile)"
+                                    style="font-size: 13px; padding: 6px 10px; width: 150px;">
+                            </div>
+                        </td>
+                        <td>
+                            <span :class="profile.is_active ? 'badge badge-success' : 'badge badge-secondary'" style="font-size: 11px;">
+                                <span :class="profile.is_active ? 'status-dot active' : 'status-dot inactive'"></span>
+                                [[ profile.is_active ? 'Active' : 'Inactive' ]]
+                            </span>
+                        </td>
+                        <td>
                             <div style="display: flex; gap: 6px;">
-                                <button @click="editProfileClick(profile)" class="btn btn-secondary" style="padding: 6px 10px; font-size: 12px;"><i class="fas fa-edit"></i></button>
-                                <button @click="toggleProfileActive(profile)" :class="profile.is_active ? 'btn btn-secondary' : 'btn btn-success'" style="padding: 6px 10px; font-size: 12px;"><i :class="profile.is_active ? 'fas fa-pause' : 'fas fa-play'"></i></button>
-                                <button @click="confirmDeleteProfile(profile)" class="btn btn-danger" style="padding: 6px 10px; font-size: 12px;"><i class="fas fa-trash"></i></button>
+                                <button @click="editProfileClick(profile)" class="btn btn-secondary" style="padding: 6px 10px; font-size: 12px;" title="Edit Profile">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button @click="toggleProfileActive(profile)" :class="profile.is_active ? 'btn btn-warning' : 'btn btn-success'" style="padding: 6px 10px; font-size: 12px;" :title="profile.is_active ? 'Deactivate' : 'Activate'">
+                                    <i :class="profile.is_active ? 'fas fa-pause' : 'fas fa-play'"></i>
+                                </button>
+                                <button @click="confirmDeleteProfile(profile)" class="btn btn-danger" style="padding: 6px 10px; font-size: 12px;" title="Delete Profile">
+                                    <i class="fas fa-trash"></i>
+                                </button>
                             </div>
-                        </div>
-                        <div style="background: #f7fafc; padding: 10px; border-radius: 6px; margin-bottom: 12px;">
-                            <div style="font-size: 12px; color: #718096; word-break: break-all; font-family: monospace;">[[ profile.profile_path ]]</div>
-                        </div>
-                        <div>
-                            <div style="display: flex; gap: 8px;">
-                                <input type="text" v-model="profile.location" placeholder="Enter location" @blur="updateProfileLocation(profile)" style="flex: 1; font-size: 13px; padding: 8px;">
-                                <button @click="updateProfileLocation(profile)" class="btn btn-primary" style="padding: 8px 12px;"><i class="fas fa-save"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
