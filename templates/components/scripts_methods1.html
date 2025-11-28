@@ -40,7 +40,38 @@ methods: {
         toggleProfileActive(profile) { const newStatus = !profile.is_active; axios.post('/toggle_profile_active', { id: profile.id, is_active: newStatus }).then(response => { if (response.data.status === 'success') { profile.is_active = newStatus; this.showToast('success', 'Profile ' + (newStatus ? 'activated' : 'deactivated')); if (!newStatus) { this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id); } } else { this.showToast('error', response.data.message || 'Failed to update status'); } }).catch(error => { this.showToast('error', 'Failed to update profile status'); }); },
         validatePath() { if (!this.profileForm.profile_path) { this.showToast('warning', 'Please enter a path first'); return; } axios.post('/validate_profile_path', { path: this.profileForm.profile_path }).then(response => { if (response.data.status === 'success') { if (response.data.exists && response.data.is_directory) { this.showDialog('success', 'Valid Path', 'The profile path exists and is valid!'); } else if (response.data.exists) { this.showDialog('warning', 'Not a Directory', 'The path exists but is not a directory.'); } else { this.showDialog('warning', 'Path Not Found', 'The profile path does not exist.'); } } }).catch(error => { this.showToast('error', 'Failed to validate path'); }); },
         isProfileSelected(profile) { return this.selectedProfiles.some(p => p.id === profile.id); },
-        onProfileCheckboxChange(event, profile) { const isChecked = event.target.checked; if (!profile.is_active) { event.preventDefault(); event.target.checked = false; this.showToast('warning', 'Cannot select an inactive profile'); return false; } if (isChecked) { if (this.selectedProfiles.length >= this.maxProfileSelection) { event.preventDefault(); event.target.checked = false; this.showDialog('warning', 'Selection Limit', 'You can only select up to ' + this.maxProfileSelection + ' profiles at a time.'); return false; } this.selectedProfiles.push(profile); } else { this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id); } },
+        // Profile checkbox - NO LIMIT on profiles anymore
+        onProfileCheckboxChange(event, profile) { 
+            const isChecked = event.target.checked; 
+            if (!profile.is_active) { 
+                event.preventDefault(); 
+                event.target.checked = false; 
+                this.showToast('warning', 'Cannot select an inactive profile'); 
+                return false; 
+            } 
+            if (isChecked) { 
+                this.selectedProfiles.push(profile); 
+            } else { 
+                this.selectedProfiles = this.selectedProfiles.filter(p => p.id !== profile.id); 
+            } 
+        },
+        // Listing checkbox - NOW HAS LIMIT
+        onListingCheckboxChange(event, listingId) {
+            const isChecked = event.target.checked;
+            if (isChecked) {
+                if (this.selectedListings.length >= this.maxListingSelection) {
+                    event.preventDefault();
+                    event.target.checked = false;
+                    this.showDialog('warning', 'Selection Limit', 'You can only select up to ' + this.maxListingSelection + ' listings at a time.');
+                    return false;
+                }
+                if (!this.selectedListings.includes(listingId)) {
+                    this.selectedListings.push(listingId);
+                }
+            } else {
+                this.selectedListings = this.selectedListings.filter(id => id !== listingId);
+            }
+        },
         showDialog(type, title, message, confirmText = 'OK') { return new Promise((resolve) => { this.dialog = { show: true, type: type, title: title, message: message, confirmText: confirmText, onConfirm: () => { this.dialog.show = false; resolve(true); }, onCancel: () => { this.dialog.show = false; resolve(false); } }; }); },
         handleDialogConfirm() { if (this.dialog.onConfirm) this.dialog.onConfirm(); },
         handleDialogCancel() { if (this.dialog.onCancel) this.dialog.onCancel(); },
@@ -54,5 +85,17 @@ methods: {
         cancelEdit() { this.editingListing = null; this.editForm = {}; },
         updateListing() { if (!this.editForm.id) { this.showToast('error', 'No listing ID found'); return; } axios.post('/update_listing', this.editForm).then(response => { if (response.data.status === 'success') { this.cancelEdit(); this.showDialog('success', 'Updated!', 'Listing updated!'); this.loadListings(); } else { this.showDialog('error', 'Error', response.data.message || 'Failed to update listing.'); } }).catch(error => { this.showDialog('error', 'Error', error.response?.data?.message || 'Failed to update listing.'); }); },
         async confirmDelete(listingId) { if (!listingId && listingId !== 0) { this.showToast('error', 'Invalid listing ID'); return; } const confirmed = await this.showDialog('confirm', 'Confirm Delete', 'Delete this listing?', 'Delete'); if (!confirmed) return; try { const response = await axios.post('/delete_listing', { index: listingId }); if (response.data.status === 'success') { this.showToast('success', 'Listing moved to deleted listings'); this.listings = this.listings.filter(l => l.id !== listingId); this.selectedListings = this.selectedListings.filter(id => id !== listingId); if (this.activeTab === 'deleted') { this.loadDeletedListings(); } } else { this.showToast('error', response.data.message || 'Failed to delete listing'); } } catch (error) { this.showDialog('error', 'Error', error.response?.data?.message || 'Failed to delete listing'); } },
-        toggleAllListings(event) { if (event.target.checked) { this.selectedListings = this.listings.map(listing => listing.id); } else { this.selectedListings = []; } },
+        // Toggle all listings - respects the limit
+        toggleAllListings(event) { 
+            if (event.target.checked) { 
+                // Only select up to the max allowed
+                const idsToSelect = this.listings.map(listing => listing.id).slice(0, this.maxListingSelection);
+                this.selectedListings = idsToSelect;
+                if (this.listings.length > this.maxListingSelection) {
+                    this.showToast('warning', 'Only first ' + this.maxListingSelection + ' listings selected (limit reached)');
+                }
+            } else { 
+                this.selectedListings = []; 
+            } 
+        },
         loadListings() { axios.get('/get_listings').then(response => { if (response.data.status === 'success') { this.listings = response.data.listings; } else { this.showToast('error', 'Failed to load listings'); } }).catch(error => { this.showToast('error', 'Failed to load listings'); }); },

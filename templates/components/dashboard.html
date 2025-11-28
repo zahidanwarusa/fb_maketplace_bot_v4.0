@@ -14,14 +14,14 @@
                 <i class="fas fa-check-circle"></i>
             </div>
             <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Selected Listings</div>
-            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ selectedListings.length ]]</div>
+            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ selectedListings.length ]] / [[ maxListingSelection ]]</div>
         </div>
         <div class="stat-card">
             <div class="stat-icon orange">
                 <i class="fas fa-users"></i>
             </div>
             <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Active Profiles</div>
-            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ selectedProfiles.length ]] / [[ maxProfileSelection ]]</div>
+            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ selectedProfiles.length ]]</div>
         </div>
         <div class="stat-card">
             <div class="stat-icon purple">
@@ -46,7 +46,7 @@
             <div @click="activeTab = 'listings'" style="padding: 20px; background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border-radius: 12px; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
                 <i class="fas fa-list" style="font-size: 32px; color: white; margin-bottom: 12px;"></i>
                 <div style="color: white; font-weight: 600; margin-bottom: 4px;">Select Listings</div>
-                <div style="color: rgba(255,255,255,0.8); font-size: 14px;">Choose vehicles to post</div>
+                <div style="color: rgba(255,255,255,0.8); font-size: 14px;">Choose vehicles to post (max [[ maxListingSelection ]])</div>
             </div>
             <div @click="activeTab = 'add-listing'" style="padding: 20px; background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%); border-radius: 12px; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
                 <i class="fas fa-plus-circle" style="font-size: 32px; color: white; margin-bottom: 12px;"></i>

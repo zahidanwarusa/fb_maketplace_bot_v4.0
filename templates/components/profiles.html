@@ -47,9 +47,7 @@
             <div class="card-title">Edge Profiles</div>
             <div style="display: flex; gap: 12px; align-items: center;">
                 <span class="badge badge-info">[[ profiles.length ]] Total</span>
-                <span :class="selectedProfiles.length >= maxProfileSelection ? 'badge badge-error' : 'badge badge-success'">
-                    [[ selectedProfiles.length ]] / [[ maxProfileSelection ]] Selected
-                </span>
+                <span class="badge badge-success">[[ selectedProfiles.length ]] Selected</span>
                 <button @click="loadProfiles" class="btn btn-secondary"><i class="fas fa-sync-alt"></i> Refresh</button>
             </div>
         </div>

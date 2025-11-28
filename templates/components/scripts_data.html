@@ -10,7 +10,7 @@ new Vue({
         profileLocations: {{ profile_locations | tojson | safe }},
         selectedProfiles: [],
         selectedListings: [],
-        maxProfileSelection: {{ max_profile_selection | default(5) }},
+        maxListingSelection: {{ max_listing_selection | default(5) }},
         logs: '',
         isRunning: false,
         uploadHistory: [],
@@ -225,5 +225,8 @@ new Vue({
         },
         activeProfiles() {
             return this.profiles.filter(p => p.is_active);
+        },
+        canSelectMoreListings() {
+            return this.selectedListings.length < this.maxListingSelection;
         }
     },

@@ -22,7 +22,7 @@ def get_profile_locations_dict(supabase):
         return {}
 
 
-def init_dashboard_routes(app, supabase, max_profile_selection, get_facebook_accounts_from_profile_func=None):
+def init_dashboard_routes(app, supabase, max_listing_selection, get_facebook_accounts_from_profile_func=None):
     """Initialize dashboard routes with app context"""
     
     @app.route('/')
@@ -65,7 +65,7 @@ def init_dashboard_routes(app, supabase, max_profile_selection, get_facebook_acc
                                  profiles=[],
                                  listings=listings, 
                                  profile_locations=profile_locations,
-                                 max_profile_selection=max_profile_selection)
+                                 max_listing_selection=max_listing_selection)
                                  
         except Exception as e:
             logger.error(f"Critical error in index route: {str(e)}")

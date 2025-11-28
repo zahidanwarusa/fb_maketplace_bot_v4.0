@@ -35,7 +35,7 @@ load_dotenv()
 
 # Configuration
 UPLOAD_FOLDER = 'temp_uploads'
-MAX_PROFILE_SELECTION = 5
+MAX_LISTING_SELECTION = 5  # Changed from MAX_PROFILE_SELECTION - now limits listings instead of profiles
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
@@ -112,14 +112,14 @@ from components.schedule import init_schedule_routes
 from components.bot import init_bot_routes
 
 # Initialize all component routes
-init_dashboard_routes(app, supabase, MAX_PROFILE_SELECTION, get_facebook_accounts_from_profile)
+init_dashboard_routes(app, supabase, MAX_LISTING_SELECTION, get_facebook_accounts_from_profile)
 init_profiles_routes(app, supabase)
 init_listings_routes(app, supabase)
 init_media_routes(app, get_drive_manager)
 init_history_routes(app, supabase)
 init_deleted_routes(app, supabase)
 init_schedule_routes(app, supabase)
-init_bot_routes(app, supabase, MAX_PROFILE_SELECTION, get_profile_locations_dict)
+init_bot_routes(app, supabase, MAX_LISTING_SELECTION, get_profile_locations_dict)
 
 
 # Error handlers
@@ -145,7 +145,7 @@ if __name__ == '__main__':
         if test_supabase_connection():
             print("🚀 Starting Flask application...")
             print("🌐 Open http://localhost:5000 in your browser")
-            print(f"⚙️  Maximum profile selection: {MAX_PROFILE_SELECTION}")
+            print(f"⚙️  Maximum listing selection: {MAX_LISTING_SELECTION}")
             print("\n")
             app.run(debug=True, host='0.0.0.0', port=5000)
         else:

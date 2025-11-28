@@ -5,7 +5,9 @@
             <div class="card-title">Vehicle Listings</div>
             <div style="display: flex; gap: 12px; align-items: center;">
                 <span class="badge badge-info">[[ listings.length ]] Total</span>
-                <span class="badge badge-success">[[ selectedListings.length ]] Selected</span>
+                <span :class="selectedListings.length >= maxListingSelection ? 'badge badge-error' : 'badge badge-success'">
+                    [[ selectedListings.length ]] / [[ maxListingSelection ]] Selected
+                </span>
                 <button @click="loadListings" class="btn btn-secondary"><i class="fas fa-sync-alt"></i> Refresh</button>
             </div>
         </div>
@@ -18,7 +20,9 @@
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 40px;"><input type="checkbox" @change="toggleAllListings" :checked="allListingsSelected" class="custom-checkbox"></th>
+                        <th style="width: 40px;">
+                            <input type="checkbox" @change="toggleAllListings" :checked="allListingsSelected" class="custom-checkbox" :title="'Select up to ' + maxListingSelection + ' listings'">
+                        </th>
                         <th>Vehicle</th>
                         <th>Details</th>
                         <th>Price</th>
@@ -26,8 +30,16 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="listing in listings" :key="listing.id">
-                        <td><input type="checkbox" v-model="selectedListings" :value="listing.id" class="custom-checkbox"></td>
+                    <tr v-for="listing in listings" :key="listing.id" :style="selectedListings.includes(listing.id) ? 'background: #f0fdf4;' : ''">
+                        <td>
+                            <input 
+                                type="checkbox" 
+                                :checked="selectedListings.includes(listing.id)" 
+                                @change="onListingCheckboxChange($event, listing.id)" 
+                                class="custom-checkbox"
+                                :disabled="!selectedListings.includes(listing.id) && selectedListings.length >= maxListingSelection"
+                                :title="!selectedListings.includes(listing.id) && selectedListings.length >= maxListingSelection ? 'Maximum ' + maxListingSelection + ' listings already selected' : ''">
+                        </td>
                         <td>
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
@@ -53,6 +65,15 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+        
+        <!-- Selection Limit Warning -->
+        <div v-if="selectedListings.length >= maxListingSelection" style="margin-top: 16px; padding: 12px 16px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; display: flex; align-items: center; gap: 12px;">
+            <i class="fas fa-exclamation-triangle" style="color: #d97706; font-size: 18px;"></i>
+            <div>
+                <div style="font-weight: 600; color: #92400e;">Maximum listings selected</div>
+                <div style="font-size: 13px; color: #a16207;">You can only select up to [[ maxListingSelection ]] listings at a time. Deselect some to choose others.</div>
+            </div>
         </div>
     </div>
 </div>

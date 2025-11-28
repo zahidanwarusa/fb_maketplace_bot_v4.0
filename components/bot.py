@@ -48,7 +48,7 @@ DEFAULT_CONFIG = {
 }
 
 
-def init_bot_routes(app, supabase, max_profile_selection, get_profile_locations_dict=None):
+def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_dict=None):
     """Initialize bot execution routes with app context"""
     
     # Ensure screenshot folder exists
@@ -93,12 +93,12 @@ def init_bot_routes(app, supabase, max_profile_selection, get_profile_locations_
                     "message": "No listings selected"
                 }), 400
             
-            # ENFORCE PROFILE SELECTION LIMIT
-            if len(selected_profiles) > max_profile_selection:
-                logger.warning(f"Profile selection limit exceeded: {len(selected_profiles)} > {max_profile_selection}")
+            # ENFORCE LISTING SELECTION LIMIT (Changed from profile limit)
+            if len(selected_listings) > max_listing_selection:
+                logger.warning(f"Listing selection limit exceeded: {len(selected_listings)} > {max_listing_selection}")
                 return jsonify({
                     "status": "error",
-                    "message": f"You can only select up to {max_profile_selection} profiles at a time. Currently selected: {len(selected_profiles)}"
+                    "message": f"You can only select up to {max_listing_selection} listings at a time. Currently selected: {len(selected_listings)}"
                 }), 400
             
             # Validate all profiles have locations
