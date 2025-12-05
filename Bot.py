@@ -1,16 +1,20 @@
 # Enhanced Facebook Marketplace Bot
 # Features: Stop functionality, real-time progress, configurable delays, screenshot saving
+# Updated: Google Drive image download support
+# Browser: Microsoft Edge (msedgedriver.exe)
 
 import os
 import sys
 import time
 import json
 import signal
+import re
+import shutil
 import pandas as pd
 from datetime import datetime
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.edge.service import Service
+from selenium.webdriver.edge.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -20,12 +24,18 @@ import pyperclip
 import pyautogui
 
 # ============================================================================
+# EDGE WEBDRIVER PATH
+# ============================================================================
+EDGE_DRIVER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'webdrivers', 'msedgedriver.exe')
+
+# ============================================================================
 # CONFIGURATION
 # ============================================================================
 
 SCREENSHOT_FOLDER = 'fbmpss'
 STATUS_FILE = 'bot_status.json'
 STOP_FILE = 'bot_stop_signal.txt'
+TEMP_IMAGES_FOLDER = 'temp_bot_images'  # Temporary folder for downloaded Google Drive images
 
 # Default delays (in seconds) - can be overridden by config
 DEFAULT_DELAYS = {
@@ -146,6 +156,149 @@ def save_screenshot(driver, prefix, profile_name="", listing_info=""):
     except Exception as e:
         print(f"⚠️ Failed to save screenshot: {e}")
         return None
+
+
+# ============================================================================
+# GOOGLE DRIVE IMAGE DOWNLOAD FUNCTIONS
+# ============================================================================
+
+def is_google_drive_url(path):
+    """Check if the path is a Google Drive URL"""
+    if not path:
+        return False
+    drive_patterns = [
+        'drive.google.com',
+        'docs.google.com',
+        'googleapis.com'
+    ]
+    return any(pattern in str(path).lower() for pattern in drive_patterns)
+
+
+def extract_drive_id(url):
+    """Extract Google Drive file/folder ID from URL"""
+    patterns = [
+        r'/file/d/([a-zA-Z0-9_-]+)',
+        r'/folders/([a-zA-Z0-9_-]+)',
+        r'id=([a-zA-Z0-9_-]+)',
+        r'^([a-zA-Z0-9_-]{25,})$'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, str(url))
+        if match:
+            return match.group(1)
+    return None
+
+
+def download_drive_images(drive_url, listing_info=""):
+    """Download images from Google Drive URL to temp folder"""
+    print(f"☁️  Detected Google Drive URL, downloading images...")
+    
+    # Create unique temp folder for this listing
+    safe_name = "".join(c for c in listing_info if c.isalnum() or c in (' ', '-', '_')).strip()[:30]
+    temp_folder = os.path.join(TEMP_IMAGES_FOLDER, safe_name or 'listing')
+    
+    # Clean up existing temp folder for this listing
+    if os.path.exists(temp_folder):
+        shutil.rmtree(temp_folder)
+    os.makedirs(temp_folder)
+    
+    try:
+        # Import the drive manager
+        from google_drive_manager import get_drive_manager
+        from googleapiclient.http import MediaIoBaseDownload
+        
+        drive_manager = get_drive_manager()
+        drive_manager.authenticate()
+        
+        file_id = extract_drive_id(drive_url)
+        if not file_id:
+            print(f"❌ Could not extract file ID from URL: {drive_url}")
+            return None
+        
+        # Check if it's a folder or file
+        try:
+            file_metadata = drive_manager.service.files().get(
+                fileId=file_id, 
+                fields='mimeType, name'
+            ).execute()
+            
+            is_folder = file_metadata.get('mimeType') == 'application/vnd.google-apps.folder'
+            
+            if is_folder:
+                # Download all images from folder
+                print(f"📁 Downloading images from folder: {file_metadata.get('name', 'Unknown')}")
+                
+                # Query for image files in the folder
+                query = f"'{file_id}' in parents and trashed=false and (mimeType contains 'image/')"
+                results = drive_manager.service.files().list(
+                    q=query,
+                    pageSize=100,
+                    fields='files(id, name, mimeType)'
+                ).execute()
+                
+                files = results.get('files', [])
+                downloaded = []
+                
+                for file in files:
+                    file_path = os.path.join(temp_folder, file['name'])
+                    try:
+                        request = drive_manager.service.files().get_media(fileId=file['id'])
+                        with open(file_path, 'wb') as f:
+                            downloader = MediaIoBaseDownload(f, request)
+                            done = False
+                            while not done:
+                                status, done = downloader.next_chunk()
+                        downloaded.append(file_path)
+                        print(f"  ✓ {file['name']}")
+                    except Exception as e:
+                        print(f"  ✗ Failed to download {file['name']}: {e}")
+                
+            else:
+                # Single file - download it
+                print(f"📄 Downloading single image: {file_metadata.get('name', 'Unknown')}")
+                filename = file_metadata.get('name', f'image_{file_id}.jpg')
+                file_path = os.path.join(temp_folder, filename)
+                
+                try:
+                    request = drive_manager.service.files().get_media(fileId=file_id)
+                    with open(file_path, 'wb') as f:
+                        downloader = MediaIoBaseDownload(f, request)
+                        done = False
+                        while not done:
+                            status, done = downloader.next_chunk()
+                    print(f"  ✓ {filename}")
+                except Exception as e:
+                    print(f"  ✗ Failed to download: {e}")
+            
+            # Check if we got any images
+            images = [f for f in os.listdir(temp_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'))]
+            if images:
+                print(f"✓ Downloaded {len(images)} image(s) to: {temp_folder}")
+                return temp_folder
+            else:
+                print("❌ No images were downloaded")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Error accessing Google Drive: {e}")
+            return None
+            
+    except ImportError:
+        print("❌ Google Drive manager not available")
+        return None
+    except Exception as e:
+        print(f"❌ Error downloading from Google Drive: {e}")
+        return None
+
+
+def cleanup_temp_images():
+    """Clean up temporary images folder"""
+    if os.path.exists(TEMP_IMAGES_FOLDER):
+        try:
+            shutil.rmtree(TEMP_IMAGES_FOLDER)
+            print(f"🧹 Cleaned up temp images folder")
+        except Exception as e:
+            print(f"⚠️ Could not clean temp folder: {e}")
 
 
 # ============================================================================
@@ -373,10 +526,19 @@ def process_single_listing(driver, single_row, location_of_profile, profile_name
             save_screenshot(driver, 'error_vehicle_type_select', profile_name, listing_info)
             return False, "Failed to select Car type"
 
-        # Upload Images
+        # Upload Images - WITH GOOGLE DRIVE SUPPORT
         try:
             images_directory = single_row['Images Path']
             print(f"📁 Processing images from: {images_directory}")
+            
+            # Check if it's a Google Drive URL and download images
+            if is_google_drive_url(images_directory):
+                local_folder = download_drive_images(images_directory, listing_info)
+                if local_folder:
+                    images_directory = local_folder
+                else:
+                    return False, "Failed to download images from Google Drive"
+            
             image_paths = generate_multiple_images_path(images_directory)
             
             if image_paths:
@@ -405,108 +567,82 @@ def process_single_listing(driver, single_row, location_of_profile, profile_name
         # Location
         try:
             loc_input = driver.find_element(By.XPATH, "//span[text()='Location']/../input")
-            loc_input.send_keys(Keys.CONTROL, "A")
+            loc_input.send_keys(Keys.CONTROL + "a")
             loc_input.send_keys(Keys.DELETE)
-            find_element_send_text(driver, "//span[text()='Location']/../input", f'{location_of_profile}')
-            specific_clicker(driver, '//ul[@role="listbox"]//li')
+            loc_input.send_keys(location_of_profile)
+            time.sleep(2)
+            loc_input.send_keys(Keys.ARROW_DOWN)
+            loc_input.send_keys(Keys.ENTER)
+            print(f"  ✓ Location set: {location_of_profile}")
         except Exception as e:
-            print(f"⚠️ Location input issue: {e}")
-        
+            print(f"  ⚠️ Error setting location: {str(e)[:50]}")
+
         if check_stop_signal():
             return False, "Stopped by user"
 
         # Year
-        year = str(int(single_row['Year']))
-        specific_clicker(driver, "//span[text()='Year']")
-        time.sleep(1)
-        try:
-            year_option = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, f"//div[@role='option']//span[text()='{year}']"))
-            )
-            year_option.click()
-        except TimeoutException:
-            print(f"⚠️ Couldn't find year {year} in dropdown, trying manual input")
-            try:
-                year_input = WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located((By.XPATH, "//label[text()='Year']/following-sibling::input"))
-                )
-                year_input.clear()
-                year_input.send_keys(year)
-                year_input.send_keys(Keys.RETURN)
-            except:
-                print(f"⚠️ Failed to enter year {year}")
-        
-        if check_stop_signal():
-            return False, "Stopped by user"
-        
+        if not specific_clicker(driver, "//span[text()='Year']"):
+            save_screenshot(driver, 'error_year', profile_name, listing_info)
+        if not specific_clicker(driver, f"//span[text()='{single_row['Year']}']"):
+            save_screenshot(driver, 'error_year_select', profile_name, listing_info)
+        print(f"  ✓ Year: {single_row['Year']}")
+
         # Make
-        make = single_row['Make']
-        try:
-            driver.find_element(By.XPATH, "//*[text()='Make']/../input")
-            find_element_send_text(driver, "//*[text()='Make']/../input", f'{make}')
-            time.sleep(1)
-        except:
-            specific_clicker(driver, "//*[text()='Make']")
-            specific_clicker(driver, f"//span[text()='{make}']", f"Make: {make}")
+        if not specific_clicker(driver, "//span[text()='Make']"):
+            save_screenshot(driver, 'error_make', profile_name, listing_info)
+        if not specific_clicker(driver, f"//span[text()='{single_row['Make']}']"):
+            save_screenshot(driver, 'error_make_select', profile_name, listing_info)
+        print(f"  ✓ Make: {single_row['Make']}")
 
         # Model
-        time.sleep(3)
-        model = single_row['Model']
-        print(f"  Model: {model}")
-        try:
-            driver.find_element(By.XPATH, "//*[text()='Model']/../div")
-            specific_clicker(driver, "//*[text()='Model']")
-            specific_clicker(driver, f"//span[text()='{model}']", f"Model: {model}")
-        except:
-            find_element_send_text(driver, "//*[text()='Model']/../input", f'{model}')
-            time.sleep(1)
-
-        if check_stop_signal():
-            return False, "Stopped by user"
+        if not specific_clicker(driver, "//span[text()='Model']"):
+            save_screenshot(driver, 'error_model', profile_name, listing_info)
+        if not specific_clicker(driver, f"//span[text()='{single_row['Model']}']"):
+            save_screenshot(driver, 'error_model_select', profile_name, listing_info)
+        print(f"  ✓ Model: {single_row['Model']}")
 
         # Mileage
-        mileage = str(int(single_row['Mileage']))
-        find_element_send_text(driver, "//*[text()='Mileage']/../input", f'{mileage}')
+        find_element_send_text(driver, "//label[text()='Mileage']/following-sibling::*//input", str(single_row['Mileage']))
+        print(f"  ✓ Mileage: {single_row['Mileage']}")
 
         # Price
-        price = str(int(single_row['Price']))
-        find_element_send_text(driver, "//*[text()='Price']/../input", f'{price}')
-
-        # Body Style
-        body_style = single_row['Body Style']
-        specific_clicker(driver, "//span[text()='Body style']")
-        specific_clicker(driver, f"//span[text()='{body_style}']", f"Body Style: {body_style}")
-
-        # Exterior Color
-        exterior_color = single_row['Exterior Color']
-        specific_clicker(driver, "//span[text()='Exterior color' or text()='Exterior colour']")
-        specific_clicker(driver, f"//span[text()='{exterior_color}']", f"Exterior Color: {exterior_color}")
-
-        # Interior Color
-        interior_color = single_row['Interior Color']
-        specific_clicker(driver, "//span[text()='Interior color' or text()='Interior colour']")
-        specific_clicker(driver, f"//span[text()='{interior_color}']", f"Interior Color: {interior_color}")
+        find_element_send_text(driver, "//label[text()='Price']/following-sibling::*//input", str(single_row['Price']))
+        print(f"  ✓ Price: {single_row['Price']}")
 
         if check_stop_signal():
             return False, "Stopped by user"
 
-        # Vehicle Condition
-        vehicle_condition = single_row['Vehicle Condition']
-        specific_clicker(driver, "//span[text()='Vehicle condition']")
-        specific_clicker(driver, f"//span[text()='{vehicle_condition}']", f"Vehicle Condition: {vehicle_condition}")
+        # Body style
+        if not specific_clicker(driver, "//span[text()='Body style']"):
+            save_screenshot(driver, 'error_body_style', profile_name, listing_info)
+        if not specific_clicker(driver, f"//span[text()='{single_row['Body Style']}']"):
+            save_screenshot(driver, 'error_body_style_select', profile_name, listing_info)
+        print(f"  ✓ Body Style: {single_row['Body Style']}")
 
-        # Fuel Type
-        fuel_type = single_row['Fuel Type']
-        specific_clicker(driver, "//span[text()='Fuel type']")
-        specific_clicker(driver, f"//span[text()='{fuel_type}']", f"Fuel Type: {fuel_type}")
+        # Exterior color
+        specific_clicker2(driver, "//span[text()='Exterior color']")
+        specific_clicker2(driver, f"//span[text()='{single_row['Exterior Color']}']")
+        print(f"  ✓ Exterior Color: {single_row['Exterior Color']}")
+
+        # Interior color
+        specific_clicker2(driver, "//span[text()='Interior color']")
+        specific_clicker2(driver, f"//span[text()='{single_row['Interior Color']}']")
+        print(f"  ✓ Interior Color: {single_row['Interior Color']}")
+
+        # Vehicle condition
+        specific_clicker2(driver, "//span[text()='Vehicle condition']")
+        specific_clicker2(driver, f"//span[text()='{single_row['Vehicle Condition']}']")
+        print(f"  ✓ Condition: {single_row['Vehicle Condition']}")
+
+        # Fuel type
+        specific_clicker2(driver, "//span[text()='Fuel type']")
+        specific_clicker2(driver, f"//span[text()='{single_row['Fuel Type']}']")
+        print(f"  ✓ Fuel Type: {single_row['Fuel Type']}")
 
         # Transmission
-        transmission = single_row['Transmission']
-        specific_clicker(driver, "//span[text()='Transmission']")
-        specific_clicker(driver, f"//span[text()='{transmission}']", f"Transmission: {transmission}")
-
-        # Clean Title
-        specific_clicker(driver, "//span[text()='This vehicle has a clean title.']/../..//label")
+        specific_clicker2(driver, "//span[text()='Transmission']")
+        specific_clicker2(driver, f"//span[text()='{single_row['Transmission']}']")
+        print(f"  ✓ Transmission: {single_row['Transmission']}")
 
         if check_stop_signal():
             return False, "Stopped by user"
@@ -684,7 +820,7 @@ def run_bot():
         if check_stop_signal():
             break
         
-        # Setup browser options
+        # Setup Edge browser options
         options = Options()
         options.add_argument(f"user-data-dir={user_data_dir}")
         options.add_argument(f"profile-directory={profile_name}")
@@ -697,10 +833,12 @@ def run_bot():
         options.add_experimental_option('excludeSwitches', ['enable-automation'])
         
         try:
-            driver = webdriver.Chrome(options=options)
+            # Use Edge WebDriver with explicit path
+            service = Service(executable_path=EDGE_DRIVER_PATH)
+            driver = webdriver.Edge(service=service, options=options)
             current_driver = driver
             driver.maximize_window()
-            print("✓ Browser launched successfully")
+            print("✓ Edge browser launched successfully")
         except WebDriverException as e:
             print(f"❌ Failed to launch browser: {e}")
             results['details'].append({
@@ -768,6 +906,9 @@ def run_bot():
             print(f"⏳ Waiting {delay}s before next profile...")
             time.sleep(delay)
     
+    # Clean up temp images folder
+    cleanup_temp_images()
+    
     # Final summary
     print(f"\n{'='*60}")
     print(f"🏁 BOT EXECUTION COMPLETE")
@@ -807,3 +948,4 @@ if __name__ == '__main__':
             except:
                 pass
         cleanup_stop_signal()
+        cleanup_temp_images()
