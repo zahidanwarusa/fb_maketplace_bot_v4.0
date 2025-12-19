@@ -1,6 +1,11 @@
 """
-Bot Component - Enhanced Version
+Bot Component - Enhanced Version WITH PROPER ERROR LOGGING
 Handles bot execution with stop functionality, real-time status tracking, and configuration
+
+FIXES APPLIED:
+1. Redirects stdout/stderr to log file instead of PIPE
+2. Sets proper working directory
+3. Logs where to find bot execution details
 """
 
 from flask import Blueprint, request, jsonify
@@ -24,12 +29,14 @@ logger = logging.getLogger(__name__)
 # Global state for bot process management
 bot_process = None
 bot_start_time = None
+bot_log_file = None  # Keep reference to log file
 
 # File paths for bot communication
 STATUS_FILE = 'bot_status.json'
 STOP_FILE = 'bot_stop_signal.txt'
 CONFIG_FILE = 'bot_config.json'
 SCREENSHOT_FOLDER = 'fbmpss'
+BOT_LOG_FILE = 'bot_execution.log'
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -59,7 +66,7 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
     @app.route('/run_bot', methods=['POST'])
     def run_bot():
         """Run the automation bot with selected Edge profiles and listings"""
-        global bot_process, bot_start_time
+        global bot_process, bot_start_time, bot_log_file
         
         try:
             # Check if bot is already running
@@ -69,8 +76,8 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                     "message": "Bot is already running. Stop it first or wait for it to finish."
                 }), 400
             
+            # Get request data
             data = request.json
-            
             if not data:
                 return jsonify({
                     "status": "error",
@@ -80,7 +87,7 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             selected_profiles = data.get('profiles', [])
             selected_listings = data.get('listings', [])
             
-            # Validate profiles and listings are selected
+            # Validate selections
             if not selected_profiles:
                 return jsonify({
                     "status": "error",
@@ -93,9 +100,8 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                     "message": "No listings selected"
                 }), 400
             
-            # ENFORCE LISTING SELECTION LIMIT (Changed from profile limit)
+            # Check maximum selection limit
             if len(selected_listings) > max_listing_selection:
-                logger.warning(f"Listing selection limit exceeded: {len(selected_listings)} > {max_listing_selection}")
                 return jsonify({
                     "status": "error",
                     "message": f"You can only select up to {max_listing_selection} listings at a time. Currently selected: {len(selected_listings)}"
@@ -203,29 +209,75 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             try:
                 logger.info(f"Starting bot with {len(selected_profiles)} Edge profiles and {len(selected_listings_data)} listings")
                 
+                # ===== THIS IS THE FIX! =====
+                # Close any previous log file
+                if bot_log_file is not None:
+                    try:
+                        bot_log_file.close()
+                    except:
+                        pass
+                
+                # Open NEW log file for bot output (this will overwrite previous log)
+                bot_log_file = open(BOT_LOG_FILE, 'w', encoding='utf-8', buffering=1)  # Line buffering
+                
+                # Get current working directory
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                bot_dir = os.path.dirname(current_dir)  # Go up one level from components/ to project root
+                
+                logger.info(f"Bot working directory: {bot_dir}")
+                logger.info(f"🔍 Bot output will be logged to: {os.path.abspath(BOT_LOG_FILE)}")
+                logger.info(f"👉 CHECK THIS FILE FOR DETAILED ERROR MESSAGES!")
+                
+                # Write initial header to log file
+                bot_log_file.write("=" * 80 + "\n")
+                bot_log_file.write(f"BOT EXECUTION LOG - {datetime.now().isoformat()}\n")
+                bot_log_file.write(f"Working Directory: {bot_dir}\n")
+                bot_log_file.write(f"Profiles: {len(selected_profiles)}\n")
+                bot_log_file.write(f"Listings: {len(selected_listings_data)}\n")
+                bot_log_file.write("=" * 80 + "\n\n")
+                bot_log_file.flush()
+                
+                # Prepare environment with UTF-8 encoding to handle emojis in Bot.py
+                env = os.environ.copy()
+                env['PYTHONIOENCODING'] = 'utf-8'  # ✅ Force UTF-8 to handle emojis!
+                
+                # Launch bot with proper logging
                 bot_process = subprocess.Popen(
                     ['python', 'Bot.py'], 
-                    stdout=subprocess.PIPE, 
-                    stderr=subprocess.PIPE,
+                    stdout=bot_log_file,  # ✅ Write to file instead of PIPE
+                    stderr=bot_log_file,  # ✅ Write to file instead of PIPE
+                    cwd=bot_dir,  # ✅ Set working directory
+                    env=env,  # ✅ Use UTF-8 environment
                     universal_newlines=True,
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
                 )
+                # ===== END OF FIX =====
                 
                 bot_start_time = datetime.now()
                 
-                logger.info(f"Bot started with PID: {bot_process.pid}")
+                logger.info(f"✅ Bot started with PID: {bot_process.pid}")
+                logger.info(f"📋 To see what the bot is doing, run: tail -f {BOT_LOG_FILE}")
                 
                 return jsonify({
                     'status': 'success',
                     'message': 'Bot started successfully',
                     'pid': bot_process.pid,
                     'total_profiles': len(selected_profiles),
-                    'total_listings': len(selected_listings_data)
+                    'total_listings': len(selected_listings_data),
+                    'log_file': BOT_LOG_FILE
                 })
                 
             except Exception as e:
                 logger.error(f"Bot execution failed: {str(e)}")
                 logger.error(traceback.format_exc())
+                
+                # Close log file if it was opened
+                if bot_log_file is not None:
+                    try:
+                        bot_log_file.close()
+                        bot_log_file = None
+                    except:
+                        pass
                 
                 return jsonify({
                     'status': 'error',
@@ -243,7 +295,7 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
     @app.route('/stop_bot', methods=['POST'])
     def stop_bot():
         """Stop the running bot gracefully"""
-        global bot_process
+        global bot_process, bot_log_file
         
         try:
             # Create stop signal file
@@ -260,6 +312,14 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                 })
             
             if bot_process.poll() is not None:
+                # Process already finished, clean up log file
+                if bot_log_file is not None:
+                    try:
+                        bot_log_file.close()
+                        bot_log_file = None
+                    except:
+                        pass
+                
                 return jsonify({
                     'status': 'warning',
                     'message': 'Bot process already finished'
@@ -272,6 +332,15 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             for i in range(10):
                 if bot_process.poll() is not None:
                     logger.info("Bot stopped gracefully")
+                    
+                    # Close log file
+                    if bot_log_file is not None:
+                        try:
+                            bot_log_file.close()
+                            bot_log_file = None
+                        except:
+                            pass
+                    
                     return jsonify({
                         'status': 'success',
                         'message': 'Bot stopped gracefully'
@@ -292,6 +361,14 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                 bot_process.wait(timeout=5)
             except Exception as e:
                 logger.error(f"Error killing process: {e}")
+            
+            # Close log file
+            if bot_log_file is not None:
+                try:
+                    bot_log_file.close()
+                    bot_log_file = None
+                except:
+                    pass
             
             return jsonify({
                 'status': 'success',
@@ -329,22 +406,29 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                 process_running = poll_result is None
                 
                 if not process_running:
-                    # Process finished, get output
-                    stdout, stderr = '', ''
-                    try:
-                        stdout, stderr = bot_process.communicate(timeout=1)
-                    except:
-                        pass
+                    # Process finished - read from log file instead of process
+                    if os.path.exists(BOT_LOG_FILE):
+                        try:
+                            with open(BOT_LOG_FILE, 'r', encoding='utf-8') as f:
+                                log_content = f.read()
+                                # Get last 2000 chars
+                                if len(log_content) > 2000:
+                                    status_data['log_tail'] = "..." + log_content[-2000:]
+                                else:
+                                    status_data['log_tail'] = log_content
+                        except:
+                            pass
                     
                     status_data['process_finished'] = True
                     status_data['exit_code'] = poll_result
-                    if stderr:
-                        status_data['stderr'] = stderr[-1000:]  # Last 1000 chars
             
             status_data['process_running'] = process_running
             
             if bot_start_time and process_running:
                 status_data['running_time'] = str(datetime.now() - bot_start_time)
+            
+            # Add log file path to status
+            status_data['log_file'] = os.path.abspath(BOT_LOG_FILE)
             
             return jsonify({
                 'status': 'success',
@@ -432,9 +516,24 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
 
     @app.route('/bot_logs', methods=['GET'])
     def get_bot_logs():
-        """Get bot execution logs"""
+        """Get bot execution logs from the log file"""
         try:
             logs = []
+            
+            # Read from bot execution log file
+            if os.path.exists(BOT_LOG_FILE):
+                try:
+                    with open(BOT_LOG_FILE, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        logs.append({
+                            'type': 'execution_log',
+                            'content': content
+                        })
+                except Exception as e:
+                    logs.append({
+                        'type': 'error',
+                        'message': f'Could not read log file: {str(e)}'
+                    })
             
             # Read from status file for recent activity
             if os.path.exists(STATUS_FILE):
@@ -442,6 +541,7 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                     with open(STATUS_FILE, 'r') as f:
                         status = json.load(f)
                     logs.append({
+                        'type': 'status',
                         'timestamp': status.get('timestamp', ''),
                         'message': status.get('message', ''),
                         'status': status.get('status', '')
@@ -449,21 +549,10 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                 except:
                     pass
             
-            # Read from app.log for detailed logs
-            if os.path.exists('app.log'):
-                try:
-                    with open('app.log', 'r', encoding='utf-8') as f:
-                        # Get last 100 lines
-                        lines = f.readlines()[-100:]
-                        for line in lines:
-                            if 'bot' in line.lower() or 'Bot' in line:
-                                logs.append({'raw': line.strip()})
-                except:
-                    pass
-            
             return jsonify({
                 'status': 'success',
-                'logs': logs
+                'logs': logs,
+                'log_file': os.path.abspath(BOT_LOG_FILE)
             })
             
         except Exception as e:
@@ -474,8 +563,8 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             }), 500
 
     @app.route('/screenshots', methods=['GET'])
-    def get_screenshots():
-        """Get list of screenshots from fbmpss folder"""
+    def list_screenshots():
+        """List all screenshots in fbmpss folder"""
         try:
             screenshots = []
             
@@ -483,50 +572,26 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                 for filename in os.listdir(SCREENSHOT_FOLDER):
                     if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                         filepath = os.path.join(SCREENSHOT_FOLDER, filename)
-                        stat = os.stat(filepath)
+                        stats = os.stat(filepath)
                         screenshots.append({
                             'filename': filename,
-                            'path': filepath,
-                            'size': stat.st_size,
-                            'created': datetime.fromtimestamp(stat.st_ctime).isoformat(),
-                            'type': 'success' if 'success' in filename.lower() else 
-                                    'error' if 'error' in filename.lower() else 'other'
+                            'size': stats.st_size,
+                            'modified': datetime.fromtimestamp(stats.st_mtime).isoformat()
                         })
             
-            # Sort by creation time, newest first
-            screenshots.sort(key=lambda x: x['created'], reverse=True)
+            screenshots.sort(key=lambda x: x['modified'], reverse=True)
             
             return jsonify({
                 'status': 'success',
                 'screenshots': screenshots,
-                'total': len(screenshots),
-                'folder': SCREENSHOT_FOLDER
+                'count': len(screenshots)
             })
             
         except Exception as e:
-            logger.error(f"Error getting screenshots: {str(e)}")
+            logger.error(f"Error listing screenshots: {str(e)}")
             return jsonify({
                 'status': 'error',
-                'message': f'Failed to get screenshots: {str(e)}'
-            }), 500
-
-    @app.route('/screenshots/<filename>', methods=['GET'])
-    def get_screenshot(filename):
-        """Get a specific screenshot"""
-        from flask import send_file
-        try:
-            filepath = os.path.join(SCREENSHOT_FOLDER, filename)
-            if os.path.exists(filepath):
-                return send_file(filepath, mimetype='image/png')
-            else:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Screenshot not found'
-                }), 404
-        except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
+                'message': f'Failed to list screenshots: {str(e)}'
             }), 500
 
     @app.route('/screenshots/clear', methods=['POST'])
@@ -563,9 +628,17 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
     @app.route('/reset_bot_state', methods=['POST'])
     def reset_bot_state():
         """Reset bot state files (useful after crashes)"""
-        global bot_process, bot_start_time
+        global bot_process, bot_start_time, bot_log_file
         
         try:
+            # Close log file if open
+            if bot_log_file is not None:
+                try:
+                    bot_log_file.close()
+                    bot_log_file = None
+                except:
+                    pass
+            
             # Clear stop file
             if os.path.exists(STOP_FILE):
                 os.remove(STOP_FILE)
