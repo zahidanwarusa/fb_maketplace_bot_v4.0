@@ -2,11 +2,11 @@
 Bot Component - Enhanced Version WITH PROPER ERROR LOGGING AND STATUS UPDATES
 Handles bot execution with stop functionality, real-time status tracking, and configuration
 
-FIXES APPLIED:
-1. Redirects stdout/stderr to log file instead of PIPE
+FEATURES:
+1. Redirects stdout/stderr to log file
 2. Sets proper working directory
-3. Logs where to find bot execution details
-4. Enhanced status tracking with proper updates
+3. Real-time status tracking
+4. File-based statistics tracking (no database changes)
 """
 
 from flask import Blueprint, request, jsonify
@@ -20,6 +20,15 @@ import time
 import signal
 from datetime import datetime
 from threading import Thread
+
+# Import stats tracker
+from .bot_stats_tracker import (
+    init_stats_file, 
+    get_stats, 
+    reset_stats, 
+    record_run_result,
+    get_activity_log
+)
 
 # Create blueprint
 bot_bp = Blueprint('bot', __name__)
@@ -58,6 +67,9 @@ DEFAULT_CONFIG = {
 
 def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_dict=None):
     """Initialize bot execution routes with app context"""
+    
+    # Initialize stats tracking
+    init_stats_file()
     
     # Ensure screenshot folder exists
     if not os.path.exists(SCREENSHOT_FOLDER):
@@ -430,7 +442,7 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
 
     @app.route('/bot_status', methods=['GET'])
     def get_bot_status():
-        """Get current bot status"""
+        """Get current bot status and update stats when finished"""
         global bot_process, bot_start_time
         
         try:
@@ -460,37 +472,65 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             
             # Check actual process state
             process_running = False
+            process_just_finished = False
+            
             if bot_process is not None:
                 poll_result = bot_process.poll()
                 process_running = poll_result is None
                 
-                if not process_running:
-                    # Process finished
-                    logger.info(f"Process finished with exit code: {poll_result}")
+                if not process_running and status_data.get('process_running', False):
+                    # Process just finished!
+                    process_just_finished = True
+                    logger.info(f"🏁 Process finished with exit code: {poll_result}")
                     
-                    # Update status if process just finished
-                    if status_data.get('process_running', False):
-                        if poll_result == 0:
-                            status_data['status'] = 'completed'
-                            status_data['message'] = 'Bot execution completed successfully'
-                        else:
-                            status_data['status'] = 'error'
-                            status_data['message'] = f'Bot process exited with code {poll_result}'
+                    # ✅ RECORD STATS FROM RESULTS
+                    if 'results' in status_data:
+                        results = status_data['results']
+                        profile = status_data.get('current_profile', 'Unknown')
+                        listing = status_data.get('current_listing', 'Unknown')
                         
-                        status_data['process_running'] = False
-                        status_data['timestamp'] = datetime.now().isoformat()
+                        # Calculate duration
+                        duration = None
+                        if bot_start_time:
+                            duration = int((datetime.now() - bot_start_time).total_seconds())
                         
-                        # Save updated status
-                        try:
-                            with open(STATUS_FILE, 'w') as f:
-                                json.dump(status_data, f, indent=2)
-                        except:
-                            pass
+                        # Record each successful listing
+                        for _ in range(results.get('success', 0)):
+                            record_run_result(profile, listing, True, duration)
+                        
+                        # Record each failed listing
+                        for _ in range(results.get('failed', 0)):
+                            record_run_result(profile, listing, False, duration, "Failed")
+                        
+                        # Record each skipped listing
+                        for _ in range(results.get('skipped', 0)):
+                            record_run_result(profile, listing, False, duration, "Stopped by user")
+                        
+                        logger.info(f"✅ Stats recorded: {results}")
+                    
+                    # Update status
+                    if poll_result == 0:
+                        status_data['status'] = 'completed'
+                        status_data['message'] = 'Bot execution completed successfully'
+                    else:
+                        status_data['status'] = 'error'
+                        status_data['message'] = f'Bot process exited with code {poll_result}'
+                    
+                    status_data['process_running'] = False
+                    status_data['timestamp'] = datetime.now().isoformat()
+                    
+                    # Save updated status
+                    try:
+                        with open(STATUS_FILE, 'w') as f:
+                            json.dump(status_data, f, indent=2)
+                    except:
+                        pass
                     
                     status_data['exit_code'] = poll_result
             
             # Override process_running with actual state
             status_data['process_running'] = process_running
+            status_data['process_just_finished'] = process_just_finished
             
             # Add runtime if running
             if bot_start_time and process_running:
@@ -529,6 +569,77 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                 'status': 'error',
                 'message': f'Failed to get status: {str(e)}',
                 'process_running': False
+            }), 500
+
+    @app.route('/bot_activity_stats', methods=['GET'])
+    def get_bot_activity_stats():
+        """Get bot activity statistics from files"""
+        try:
+            # Get stats from file
+            stats = get_stats()
+            
+            # Get screenshot count
+            screenshot_count = 0
+            if os.path.exists(SCREENSHOT_FOLDER):
+                screenshot_count = len([f for f in os.listdir(SCREENSHOT_FOLDER) 
+                                       if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
+            
+            return jsonify({
+                'status': 'success',
+                'stats': {
+                    'total_runs': stats.get('total_runs', 0),
+                    'successful': stats.get('successful', 0),
+                    'failed': stats.get('failed', 0),
+                    'skipped': stats.get('skipped', 0),
+                    'screenshots': screenshot_count,
+                    'session_start': stats.get('session_start', ''),
+                    'last_reset': stats.get('last_reset', '')
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Error getting bot activity stats: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to get stats: {str(e)}'
+            }), 500
+    
+    @app.route('/bot_activity_log', methods=['GET'])
+    def get_bot_activity_log_route():
+        """Get recent activity log entries"""
+        try:
+            lines = request.args.get('lines', 50, type=int)
+            log_content = get_activity_log(lines)
+            
+            return jsonify({
+                'status': 'success',
+                'log': log_content
+            })
+            
+        except Exception as e:
+            logger.error(f"Error getting activity log: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to get log: {str(e)}'
+            }), 500
+    
+    @app.route('/reset_bot_stats', methods=['POST'])
+    def reset_bot_stats_route():
+        """Reset bot statistics"""
+        try:
+            stats = reset_stats()
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Statistics reset successfully',
+                'stats': stats
+            })
+            
+        except Exception as e:
+            logger.error(f"Error resetting stats: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to reset stats: {str(e)}'
             }), 500
 
     @app.route('/bot_config', methods=['GET'])

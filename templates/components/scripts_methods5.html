@@ -1,5 +1,5 @@
 // ========================================================================
-        // BOT MANAGEMENT METHODS - FULLY DEBUGGED VERSION
+        // BOT MANAGEMENT METHODS - FULLY DEBUGGED VERSION WITH STATS TRACKING
         // ========================================================================
         
         async runBot() {
@@ -190,15 +190,25 @@
                             this.showDialog('success', '🎉 Bot Completed!', 
                                 `✅ Successfully posted: ${results.success || 0}\n❌ Failed: ${results.failed || 0}\n⏭️  Skipped: ${results.skipped || 0}`);
                             
-                            // Reload all related data
-                            console.log('🔄 Reloading data after completion...');
-                            this.loadScreenshots();
-                            this.loadBotActivityHistory();
-                            this.loadUploadHistory();
+                            // ✅ CRITICAL: Reload ALL data after completion
+                            console.log('🔄 Reloading all data after completion...');
+                            
+                            // Wait a moment for stats to be written
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            
+                            // Reload everything
+                            await this.loadScreenshots();
+                            await this.loadBotActivityStats();  // ✅ This loads the stats!
+                            await this.loadBotActivityHistory();
+                            
+                            console.log('✅ All data reloaded!');
                             
                         } else if (response.data.status === 'stopped') {
                             this.logs += `[${timestamp}] ⚠️  Bot was stopped by user\n\n`;
                             this.showDialog('info', 'Bot Stopped', 'Bot was stopped by user request.');
+                            
+                            // Still reload data in case some posts completed
+                            await this.loadBotActivityStats();
                             
                         } else if (response.data.status === 'error') {
                             this.logs += `[${timestamp}] ❌ Error: ${response.data.message}\n\n`;
@@ -215,7 +225,6 @@
                     response: error.response?.data,
                     status: error.response?.status
                 });
-                // Don't stop polling - might be temporary network issue
             }
         },
         
@@ -394,33 +403,96 @@
             }
         },
         
+        // ========================================================================
+        // BOT STATISTICS AND ACTIVITY TRACKING
+        // ========================================================================
+        
+        async loadBotActivityStats() {
+            try {
+                const response = await axios.get('/bot_activity_stats');
+                
+                if (response.data.status === 'success') {
+                    this.botActivityStats.total_runs = response.data.stats.total_runs;
+                    this.botActivityStats.successful = response.data.stats.successful;
+                    this.botActivityStats.failed = response.data.stats.failed;
+                    
+                    console.log('📊 Bot activity stats loaded:', this.botActivityStats);
+                    console.log('📅 Session started:', response.data.stats.session_start);
+                    console.log('🔄 Last reset:', response.data.stats.last_reset);
+                } else {
+                    console.error('Failed to load stats:', response.data);
+                }
+            } catch (error) {
+                console.error('Error loading bot activity stats:', error);
+            }
+        },
+        
         async loadBotActivityHistory() {
             try {
-                const response = await axios.get('/upload_history', { 
-                    params: { page: 1, page_size: 20 } 
+                // Load recent activity from text log
+                const logResponse = await axios.get('/bot_activity_log', {
+                    params: { lines: 100 }
                 });
                 
-                if (response.data.uploads) {
-                    this.botActivityHistory = response.data.uploads.map(upload => ({
-                        id: upload.id,
-                        timestamp: upload.upload_datetime,
-                        profile_name: upload.profile_name,
-                        vehicle_info: upload.vehicle_info ? 
-                            `${upload.vehicle_info.year} ${upload.vehicle_info.make} ${upload.vehicle_info.model}` : 
-                            'Unknown',
-                        action: 'Post',
-                        status: upload.status,
-                        duration: upload.duration || null
-                    }));
-                    
-                    // Update stats
-                    this.botActivityStats.total_runs = response.data.total || 0;
-                    this.botActivityStats.successful = response.data.stats?.success || 0;
-                    this.botActivityStats.failed = response.data.stats?.failed || 0;
+                if (logResponse.data.status === 'success') {
+                    // Parse log into activity history
+                    const logLines = logResponse.data.log.split('\n').filter(line => line.trim());
+                    this.botActivityHistory = logLines
+                        .filter(line => line.includes('Profile:'))
+                        .map((line, index) => {
+                            // Parse: [2024-12-19 07:42:10] Profile: Allison | Listing: 2017 Nissan Altima | Status: SUCCESS | Duration: 120s
+                            const timestampMatch = line.match(/\[(.*?)\]/);
+                            const profileMatch = line.match(/Profile: (.*?) \|/);
+                            const listingMatch = line.match(/Listing: (.*?) \|/);
+                            const statusMatch = line.match(/Status: (\w+)/);
+                            const durationMatch = line.match(/Duration: (\d+)s/);
+                            
+                            return {
+                                id: index,
+                                timestamp: timestampMatch ? timestampMatch[1] : '',
+                                profile_name: profileMatch ? profileMatch[1] : 'Unknown',
+                                vehicle_info: listingMatch ? listingMatch[1] : 'Unknown',
+                                action: 'Post',
+                                status: statusMatch ? statusMatch[1].toLowerCase() : 'unknown',
+                                duration: durationMatch ? parseInt(durationMatch[1]) : null
+                            };
+                        })
+                        .reverse(); // Show newest first
                     
                     console.log('📊 Bot activity history loaded:', this.botActivityHistory.length, 'records');
                 }
+                
+                // Also load statistics
+                await this.loadBotActivityStats();
+                
             } catch (error) {
                 console.error('Error loading bot activity history:', error);
+            }
+        },
+        
+        async resetBotStats() {
+            const confirmed = await this.showDialog('confirm', 'Reset Statistics', 
+                'Reset all bot statistics to zero? Activity log will be preserved with a reset marker.', 'Reset Stats');
+            if (!confirmed) return;
+            
+            try {
+                const response = await axios.post('/reset_bot_stats');
+                if (response.data.status === 'success') {
+                    this.showToast('success', 'Statistics reset successfully');
+                    
+                    // Reset local stats display
+                    this.botActivityStats.total_runs = 0;
+                    this.botActivityStats.successful = 0;
+                    this.botActivityStats.failed = 0;
+                    
+                    // Reload to confirm
+                    await this.loadBotActivityStats();
+                    await this.loadBotActivityHistory();
+                } else {
+                    this.showToast('error', 'Failed to reset statistics');
+                }
+            } catch (error) {
+                console.error('Error resetting stats:', error);
+                this.showToast('error', 'Failed to reset statistics');
             }
         },

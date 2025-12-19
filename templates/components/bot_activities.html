@@ -75,38 +75,6 @@
         </div>
     </div>
 
-    <!-- Stats Grid -->
-    <div class="stats-grid" style="margin-bottom: 24px;">
-        <div class="stat-card">
-            <div class="stat-icon blue">
-                <i class="fas fa-play-circle"></i>
-            </div>
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Total Runs</div>
-            <div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ botActivityStats.total_runs ]]</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon green">
-                <i class="fas fa-check-circle"></i>
-            </div>
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Successful Posts</div>
-            <div style="font-size: 32px; font-weight: 700; color: #48bb78;">[[ botActivityStats.successful ]]</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon orange">
-                <i class="fas fa-exclamation-circle"></i>
-            </div>
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Failed</div>
-            <div style="font-size: 32px; font-weight: 700; color: #ed8936;">[[ botActivityStats.failed ]]</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon purple">
-                <i class="fas fa-camera"></i>
-            </div>
-            <div style="color: #718096; font-size: 14px; margin-bottom: 4px;">Screenshots</div>
-            <div style="font-size: 32px; font-weight: 700; color: #9f7aea;">[[ screenshots.length ]]</div>
-        </div>
-    </div>
-
     <!-- Two Column Layout -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
         
@@ -258,66 +226,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <!-- Recent Activity History -->
-    <div class="card" style="margin-top: 24px;">
-        <div class="card-header">
-            <div class="card-title">
-                <i class="fas fa-history" style="color: #ed8936; margin-right: 8px;"></i>
-                Recent Bot Activity
-            </div>
-            <button @click="loadBotActivityHistory" class="btn btn-secondary">
-                <i class="fas fa-sync-alt"></i> Refresh
-            </button>
-        </div>
-        
-        <div v-if="botActivityHistory.length === 0" class="empty-state" style="padding: 40px;">
-            <i class="fas fa-inbox" style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;"></i>
-            <h3 style="font-size: 18px; font-weight: 600; color: #1a202c; margin-bottom: 8px;">No Activity Yet</h3>
-            <p style="color: #718096;">Bot activity will be logged here</p>
-        </div>
-        
-        <div v-else class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Profile</th>
-                        <th>Vehicle</th>
-                        <th>Action</th>
-                        <th>Status</th>
-                        <th>Duration</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="activity in botActivityHistory" :key="activity.id">
-                        <td>
-                            <div style="font-weight: 600; color: #1a202c; font-size: 13px;">[[ formatDate(activity.timestamp) ]]</div>
-                            <div style="color: #718096; font-size: 12px;">[[ formatTime(activity.timestamp) ]]</div>
-                        </td>
-                        <td>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <i class="fab fa-edge" style="color: #0078d4;"></i>
-                                <span>[[ activity.profile_name ]]</span>
-                            </div>
-                        </td>
-                        <td>
-                            <div style="font-weight: 500;">[[ activity.vehicle_info ]]</div>
-                        </td>
-                        <td>
-                            <span class="badge badge-info">[[ activity.action ]]</span>
-                        </td>
-                        <td>
-                            <span :class="'badge badge-' + getStatusType(activity.status)">[[ activity.status ]]</span>
-                        </td>
-                        <td style="color: #718096; font-size: 13px;">
-                            [[ activity.duration || '-' ]]
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
         </div>
     </div>
 </div>
