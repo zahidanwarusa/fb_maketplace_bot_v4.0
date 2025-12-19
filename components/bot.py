@@ -1,11 +1,12 @@
 """
-Bot Component - Enhanced Version WITH PROPER ERROR LOGGING
+Bot Component - Enhanced Version WITH PROPER ERROR LOGGING AND STATUS UPDATES
 Handles bot execution with stop functionality, real-time status tracking, and configuration
 
 FIXES APPLIED:
 1. Redirects stdout/stderr to log file instead of PIPE
 2. Sets proper working directory
 3. Logs where to find bot execution details
+4. Enhanced status tracking with proper updates
 """
 
 from flask import Blueprint, request, jsonify
@@ -62,6 +63,17 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
     if not os.path.exists(SCREENSHOT_FOLDER):
         os.makedirs(SCREENSHOT_FOLDER)
         logger.info(f"Created screenshot folder: {SCREENSHOT_FOLDER}")
+    
+    # Ensure status file exists with idle state
+    if not os.path.exists(STATUS_FILE):
+        with open(STATUS_FILE, 'w') as f:
+            json.dump({
+                'status': 'idle',
+                'message': 'Ready to start',
+                'timestamp': datetime.now().isoformat(),
+                'process_running': False,
+                'progress': 0
+            }, f)
     
     @app.route('/run_bot', methods=['POST'])
     def run_bot():
@@ -193,23 +205,34 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                     "message": f"Failed to prepare listing data: {str(e)}"
                 }), 500
             
-            # Initialize status file
+            # Initialize status file with starting state
             initial_status = {
                 'status': 'starting',
-                'message': 'Bot is starting...',
+                'message': 'Bot is initializing...',
                 'timestamp': datetime.now().isoformat(),
+                'process_running': True,
                 'total_profiles': len(selected_profiles),
                 'total_listings': len(selected_listings_data),
-                'progress': 0
+                'current_profile_idx': 0,
+                'current_listing_idx': 0,
+                'current_profile': '',
+                'current_listing': '',
+                'progress': 0,
+                'results': {
+                    'success': 0,
+                    'failed': 0,
+                    'skipped': 0
+                }
             }
             with open(STATUS_FILE, 'w') as f:
-                json.dump(initial_status, f)
+                json.dump(initial_status, f, indent=2)
+            
+            logger.info(f"✅ Initial status file created: {initial_status}")
             
             # Run the bot script in background
             try:
                 logger.info(f"Starting bot with {len(selected_profiles)} Edge profiles and {len(selected_listings_data)} listings")
                 
-                # ===== THIS IS THE FIX! =====
                 # Close any previous log file
                 if bot_log_file is not None:
                     try:
@@ -239,19 +262,18 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                 
                 # Prepare environment with UTF-8 encoding to handle emojis in Bot.py
                 env = os.environ.copy()
-                env['PYTHONIOENCODING'] = 'utf-8'  # ✅ Force UTF-8 to handle emojis!
+                env['PYTHONIOENCODING'] = 'utf-8'
                 
                 # Launch bot with proper logging
                 bot_process = subprocess.Popen(
                     ['python', 'Bot.py'], 
-                    stdout=bot_log_file,  # ✅ Write to file instead of PIPE
-                    stderr=bot_log_file,  # ✅ Write to file instead of PIPE
-                    cwd=bot_dir,  # ✅ Set working directory
-                    env=env,  # ✅ Use UTF-8 environment
+                    stdout=bot_log_file,
+                    stderr=bot_log_file,
+                    cwd=bot_dir,
+                    env=env,
                     universal_newlines=True,
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
                 )
-                # ===== END OF FIX =====
                 
                 bot_start_time = datetime.now()
                 
@@ -270,6 +292,18 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             except Exception as e:
                 logger.error(f"Bot execution failed: {str(e)}")
                 logger.error(traceback.format_exc())
+                
+                # Update status to error
+                try:
+                    with open(STATUS_FILE, 'w') as f:
+                        json.dump({
+                            'status': 'error',
+                            'message': f'Failed to start: {str(e)}',
+                            'timestamp': datetime.now().isoformat(),
+                            'process_running': False
+                        }, f)
+                except:
+                    pass
                 
                 # Close log file if it was opened
                 if bot_log_file is not None:
@@ -304,6 +338,19 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             
             logger.info("Stop signal file created")
             
+            # Update status
+            try:
+                if os.path.exists(STATUS_FILE):
+                    with open(STATUS_FILE, 'r') as f:
+                        status = json.load(f)
+                    status['status'] = 'stopping'
+                    status['message'] = 'Stop signal received, finishing current task...'
+                    status['timestamp'] = datetime.now().isoformat()
+                    with open(STATUS_FILE, 'w') as f:
+                        json.dump(status, f, indent=2)
+            except:
+                pass
+            
             # Check if process is running
             if bot_process is None:
                 return jsonify({
@@ -312,7 +359,7 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
                 })
             
             if bot_process.poll() is not None:
-                # Process already finished, clean up log file
+                # Process already finished
                 if bot_log_file is not None:
                     try:
                         bot_log_file.close()
@@ -351,11 +398,9 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             logger.warning("Bot did not stop gracefully, forcing termination...")
             try:
                 if os.name == 'nt':
-                    # Windows
                     subprocess.call(['taskkill', '/F', '/T', '/PID', str(bot_process.pid)], 
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 else:
-                    # Unix
                     os.killpg(os.getpgid(bot_process.pid), signal.SIGTERM)
                     
                 bot_process.wait(timeout=5)
@@ -389,46 +434,88 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
         global bot_process, bot_start_time
         
         try:
-            # Check if status file exists
+            # Read status file
             if os.path.exists(STATUS_FILE):
                 try:
                     with open(STATUS_FILE, 'r') as f:
                         status_data = json.load(f)
-                except:
-                    status_data = {'status': 'unknown', 'message': 'Could not read status file'}
+                    
+                    logger.debug(f"📊 Read status from file: {status_data}")
+                    
+                except Exception as e:
+                    logger.error(f"Error reading status file: {e}")
+                    status_data = {
+                        'status': 'error',
+                        'message': f'Could not read status file: {str(e)}',
+                        'process_running': False
+                    }
             else:
-                status_data = {'status': 'idle', 'message': 'No bot running'}
+                logger.warning("⚠️ Status file does not exist!")
+                status_data = {
+                    'status': 'idle',
+                    'message': 'No bot running',
+                    'process_running': False,
+                    'progress': 0
+                }
             
-            # Check process state
+            # Check actual process state
             process_running = False
             if bot_process is not None:
                 poll_result = bot_process.poll()
                 process_running = poll_result is None
                 
                 if not process_running:
-                    # Process finished - read from log file instead of process
-                    if os.path.exists(BOT_LOG_FILE):
+                    # Process finished
+                    logger.info(f"Process finished with exit code: {poll_result}")
+                    
+                    # Update status if process just finished
+                    if status_data.get('process_running', False):
+                        if poll_result == 0:
+                            status_data['status'] = 'completed'
+                            status_data['message'] = 'Bot execution completed successfully'
+                        else:
+                            status_data['status'] = 'error'
+                            status_data['message'] = f'Bot process exited with code {poll_result}'
+                        
+                        status_data['process_running'] = False
+                        status_data['timestamp'] = datetime.now().isoformat()
+                        
+                        # Save updated status
                         try:
-                            with open(BOT_LOG_FILE, 'r', encoding='utf-8') as f:
-                                log_content = f.read()
-                                # Get last 2000 chars
-                                if len(log_content) > 2000:
-                                    status_data['log_tail'] = "..." + log_content[-2000:]
-                                else:
-                                    status_data['log_tail'] = log_content
+                            with open(STATUS_FILE, 'w') as f:
+                                json.dump(status_data, f, indent=2)
                         except:
                             pass
                     
-                    status_data['process_finished'] = True
                     status_data['exit_code'] = poll_result
             
+            # Override process_running with actual state
             status_data['process_running'] = process_running
             
+            # Add runtime if running
             if bot_start_time and process_running:
                 status_data['running_time'] = str(datetime.now() - bot_start_time)
             
-            # Add log file path to status
+            # Add log file path
             status_data['log_file'] = os.path.abspath(BOT_LOG_FILE)
+            
+            # Ensure all required fields exist
+            if 'total_profiles' not in status_data:
+                status_data['total_profiles'] = 0
+            if 'total_listings' not in status_data:
+                status_data['total_listings'] = 0
+            if 'current_profile_idx' not in status_data:
+                status_data['current_profile_idx'] = 0
+            if 'current_listing_idx' not in status_data:
+                status_data['current_listing_idx'] = 0
+            if 'current_profile' not in status_data:
+                status_data['current_profile'] = ''
+            if 'current_listing' not in status_data:
+                status_data['current_listing'] = ''
+            if 'progress' not in status_data:
+                status_data['progress'] = 0
+            if 'results' not in status_data:
+                status_data['results'] = {'success': 0, 'failed': 0, 'skipped': 0}
             
             return jsonify({
                 'status': 'success',
@@ -437,9 +524,11 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             
         except Exception as e:
             logger.error(f"Error getting bot status: {str(e)}")
+            logger.error(traceback.format_exc())
             return jsonify({
                 'status': 'error',
-                'message': f'Failed to get status: {str(e)}'
+                'message': f'Failed to get status: {str(e)}',
+                'process_running': False
             }), 500
 
     @app.route('/bot_config', methods=['GET'])
@@ -643,9 +732,22 @@ def init_bot_routes(app, supabase, max_listing_selection, get_profile_locations_
             if os.path.exists(STOP_FILE):
                 os.remove(STOP_FILE)
             
-            # Reset status file
-            if os.path.exists(STATUS_FILE):
-                os.remove(STATUS_FILE)
+            # Reset status file to idle
+            with open(STATUS_FILE, 'w') as f:
+                json.dump({
+                    'status': 'idle',
+                    'message': 'Ready to start',
+                    'timestamp': datetime.now().isoformat(),
+                    'process_running': False,
+                    'progress': 0,
+                    'total_profiles': 0,
+                    'total_listings': 0,
+                    'current_profile_idx': 0,
+                    'current_listing_idx': 0,
+                    'current_profile': '',
+                    'current_listing': '',
+                    'results': {'success': 0, 'failed': 0, 'skipped': 0}
+                }, f, indent=2)
             
             # Reset global state
             bot_process = None

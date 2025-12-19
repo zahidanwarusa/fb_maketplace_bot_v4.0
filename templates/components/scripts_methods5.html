@@ -1,5 +1,5 @@
-        // ========================================================================
-        // BOT MANAGEMENT METHODS - NEW
+// ========================================================================
+        // BOT MANAGEMENT METHODS - FULLY DEBUGGED VERSION
         // ========================================================================
         
         async runBot() {
@@ -13,34 +13,44 @@
             if (!confirmed) return;
 
             this.isRunning = true;
-            this.logs = 'Initializing bot...\n';
+            this.logs = '🚀 Initializing bot...\n';
+            this.lastBotMessage = '';
             this.showToast('info', 'Bot starting...');
             
-            const listingsData = this.selectedListings.map(index => ({
-                ...this.listings.find(l => l.id === index),
-                selectedDay: this.listings.find(l => l.id === index)?.selectedDay
-            }));
+            console.log('🚀 runBot() called');
+            console.log('Selected profiles:', this.selectedProfiles);
+            console.log('Selected listings:', this.selectedListings);
             
             try {
                 const response = await axios.post('/run_bot', {
                     profiles: this.selectedProfiles,
-                    listings: this.selectedListings,
-                    listingsData: listingsData
+                    listings: this.selectedListings
                 });
+                
+                console.log('✅ Bot start response:', response.data);
                 
                 if (response.data.status === 'success') {
                     this.showToast('success', 'Bot started successfully!');
-                    this.logs += 'Bot started with PID: ' + response.data.pid + '\n';
+                    this.logs += `✅ Bot started (PID: ${response.data.pid})\n`;
+                    this.logs += `📊 Profiles: ${response.data.total_profiles} | Listings: ${response.data.total_listings}\n`;
+                    this.logs += `${'='.repeat(60)}\n\n`;
                     
-                    // Start polling for status
+                    // Switch to bot activities tab
+                    this.activeTab = 'bot-activities';
+                    
+                    // Start polling IMMEDIATELY
+                    console.log('🔄 Starting status polling...');
                     this.startBotStatusPolling();
                 } else {
+                    console.error('❌ Bot start failed:', response.data);
                     this.showDialog('error', 'Bot Error', response.data.message || 'Failed to start bot');
                     this.isRunning = false;
+                    this.logs += `❌ Failed to start: ${response.data.message}\n`;
                 }
             } catch (error) {
-                const errorMsg = error.response?.data?.message || 'An error occurred';
-                this.logs += '\nError: ' + errorMsg;
+                console.error('❌ Bot start exception:', error);
+                const errorMsg = error.response?.data?.message || error.message || 'An error occurred';
+                this.logs += `\n❌ Error: ${errorMsg}\n`;
                 this.showDialog('error', 'Bot Error', errorMsg);
                 this.isRunning = false;
             }
@@ -59,18 +69,14 @@
                 
                 if (response.data.status === 'success') {
                     this.showToast('success', response.data.message);
-                    this.logs += '\n⚠️ Bot stop requested\n';
+                    const timestamp = new Date().toLocaleTimeString();
+                    this.logs += `\n[${timestamp}] ⚠️ STOP SIGNAL SENT - Bot will finish current task and stop\n`;
                 } else {
                     this.showToast('warning', response.data.message);
                 }
             } catch (error) {
                 console.error('Error stopping bot:', error);
                 this.showToast('error', 'Failed to stop bot');
-            } finally {
-                // Keep polling to see when it actually stops
-                setTimeout(() => {
-                    this.stoppingBot = false;
-                }, 3000);
             }
         },
         
@@ -80,12 +86,14 @@
                 clearInterval(this.botStatusInterval);
             }
             
-            // Poll every 2 seconds
+            console.log('🔄 Starting bot status polling (every 1 second)');
+            
+            // Poll every 1 second for very responsive updates
             this.botStatusInterval = setInterval(() => {
                 this.fetchBotStatus();
-            }, 2000);
+            }, 1000);
             
-            // Also fetch immediately
+            // Fetch immediately
             this.fetchBotStatus();
         },
         
@@ -93,6 +101,7 @@
             if (this.botStatusInterval) {
                 clearInterval(this.botStatusInterval);
                 this.botStatusInterval = null;
+                console.log('⏸️ Stopped bot status polling');
             }
         },
         
@@ -100,58 +109,130 @@
             try {
                 const response = await axios.get('/bot_status');
                 
-                if (response.data.status === 'success') {
-                    // Update bot status
-                    this.botStatus = {
-                        ...this.botStatus,
-                        ...response.data
-                    };
+                console.log('📊 Bot status response:', response.data);
+                
+                if (response.data.status === 'success' || response.data.status) {
+                    // Store previous state for comparison
+                    const prevRunning = this.botStatus.process_running;
+                    const prevProgress = this.botStatus.progress;
+                    const prevMessage = this.botStatus.message;
                     
-                    // Update logs if available
-                    if (response.data.message) {
-                        // Only add if different from last message
-                        const lastLine = this.logs.split('\n').filter(l => l.trim()).pop();
-                        if (!lastLine || !lastLine.includes(response.data.message)) {
-                            this.logs += `[${response.data.status}] ${response.data.message}\n`;
+                    // ✅ CRITICAL: Update each field individually for Vue reactivity
+                    this.botStatus.status = response.data.status || 'idle';
+                    this.botStatus.message = response.data.message || '';
+                    this.botStatus.progress = response.data.progress || 0;
+                    this.botStatus.process_running = response.data.process_running || false;
+                    this.botStatus.current_profile = response.data.current_profile || '';
+                    this.botStatus.current_listing = response.data.current_listing || '';
+                    this.botStatus.current_profile_idx = response.data.current_profile_idx || 0;
+                    this.botStatus.current_listing_idx = response.data.current_listing_idx || 0;
+                    this.botStatus.total_profiles = response.data.total_profiles || 0;
+                    this.botStatus.total_listings = response.data.total_listings || 0;
+                    this.botStatus.results = response.data.results || { success: 0, failed: 0, skipped: 0 };
+                    
+                    console.log('✅ Bot status updated:', {
+                        status: this.botStatus.status,
+                        running: this.botStatus.process_running,
+                        progress: this.botStatus.progress,
+                        message: this.botStatus.message
+                    });
+                    
+                    // Update logs with new messages (with timestamp)
+                    if (response.data.message && response.data.message.trim()) {
+                        const newMessage = response.data.message.trim();
+                        
+                        // Add if it's a different message OR if process just started
+                        if (newMessage !== prevMessage && newMessage !== this.lastBotMessage) {
+                            const timestamp = new Date().toLocaleTimeString();
+                            this.logs += `[${timestamp}] ${newMessage}\n`;
+                            this.lastBotMessage = newMessage;
+                            
+                            console.log('📝 Added log:', newMessage);
+                            
+                            // Auto-scroll logs container to bottom
+                            this.$nextTick(() => {
+                                const container = this.$refs.logsContainer;
+                                if (container) {
+                                    container.scrollTop = container.scrollHeight;
+                                }
+                            });
                         }
                     }
                     
-                    // Check if bot finished
-                    if (!response.data.process_running) {
+                    // Log significant progress changes (every 5%)
+                    if (response.data.progress && response.data.progress !== prevProgress) {
+                        if (response.data.progress % 5 === 0 || response.data.progress === 100) {
+                            const timestamp = new Date().toLocaleTimeString();
+                            this.logs += `[${timestamp}] 📊 Progress: ${response.data.progress}%\n`;
+                        }
+                    }
+                    
+                    // Check if bot just finished
+                    if (prevRunning && !response.data.process_running) {
+                        console.log('🏁 Bot execution completed!');
+                        
                         this.isRunning = false;
+                        this.stoppingBot = false;
                         this.stopBotStatusPolling();
                         
-                        // Show completion message
+                        const timestamp = new Date().toLocaleTimeString();
+                        this.logs += `\n[${timestamp}] ${'='.repeat(60)}\n`;
+                        this.logs += `[${timestamp}] 🏁 BOT EXECUTION COMPLETED\n`;
+                        this.logs += `[${timestamp}] ${'='.repeat(60)}\n`;
+                        
+                        // Show completion dialog with results
                         if (response.data.status === 'completed') {
                             const results = response.data.results || {};
-                            this.showDialog('success', 'Bot Completed!', 
-                                `Successfully posted: ${results.success || 0}\nFailed: ${results.failed || 0}\nSkipped: ${results.skipped || 0}`);
+                            this.logs += `[${timestamp}] ✅ Success: ${results.success || 0}\n`;
+                            this.logs += `[${timestamp}] ❌ Failed: ${results.failed || 0}\n`;
+                            this.logs += `[${timestamp}] ⏭️  Skipped: ${results.skipped || 0}\n\n`;
+                            
+                            this.showDialog('success', '🎉 Bot Completed!', 
+                                `✅ Successfully posted: ${results.success || 0}\n❌ Failed: ${results.failed || 0}\n⏭️  Skipped: ${results.skipped || 0}`);
+                            
+                            // Reload all related data
+                            console.log('🔄 Reloading data after completion...');
                             this.loadScreenshots();
+                            this.loadBotActivityHistory();
+                            this.loadUploadHistory();
+                            
                         } else if (response.data.status === 'stopped') {
-                            this.showDialog('warning', 'Bot Stopped', 'Bot was stopped by user');
+                            this.logs += `[${timestamp}] ⚠️  Bot was stopped by user\n\n`;
+                            this.showDialog('info', 'Bot Stopped', 'Bot was stopped by user request.');
+                            
                         } else if (response.data.status === 'error') {
-                            this.showDialog('error', 'Bot Error', response.data.message || 'An error occurred');
+                            this.logs += `[${timestamp}] ❌ Error: ${response.data.message}\n\n`;
+                            this.showDialog('error', 'Bot Error', response.data.message || 'An error occurred during execution');
                         }
                     }
+                } else {
+                    console.warn('⚠️ Unexpected status response format:', response.data);
                 }
             } catch (error) {
-                console.error('Error fetching bot status:', error);
+                console.error('❌ Error fetching bot status:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    response: error.response?.data,
+                    status: error.response?.status
+                });
+                // Don't stop polling - might be temporary network issue
             }
         },
         
+        // Bot Configuration Methods
         async loadBotConfig() {
             try {
                 const response = await axios.get('/bot_config');
                 if (response.data.status === 'success') {
                     this.botConfig = {
                         ...this.defaultBotConfig,
-                        ...response.data.config
+                        ...response.data.config,
+                        delays: {
+                            ...this.defaultBotConfig.delays,
+                            ...(response.data.config.delays || {})
+                        }
                     };
-                    // Ensure delays object is complete
-                    this.botConfig.delays = {
-                        ...this.defaultBotConfig.delays,
-                        ...response.data.config.delays
-                    };
+                    console.log('⚙️ Bot config loaded:', this.botConfig);
                 }
             } catch (error) {
                 console.error('Error loading bot config:', error);
@@ -180,48 +261,26 @@
         },
         
         applyPreset(preset) {
-            switch (preset) {
-                case 'fast':
-                    this.botConfig.delays = {
-                        between_listings: 3,
-                        between_profiles: 5,
-                        after_publish: 3,
-                        page_load: 3,
-                        element_wait: 1,
-                        group_selection: 0.5
-                    };
-                    this.showToast('info', 'Fast preset applied - use with caution!');
-                    break;
-                case 'balanced':
-                    this.botConfig.delays = {
-                        between_listings: 5,
-                        between_profiles: 10,
-                        after_publish: 5,
-                        page_load: 4,
-                        element_wait: 2,
-                        group_selection: 1
-                    };
-                    this.showToast('info', 'Balanced preset applied');
-                    break;
-                case 'safe':
-                    this.botConfig.delays = {
-                        between_listings: 10,
-                        between_profiles: 20,
-                        after_publish: 8,
-                        page_load: 6,
-                        element_wait: 3,
-                        group_selection: 2
-                    };
-                    this.showToast('info', 'Safe preset applied - slower but safer');
-                    break;
+            const presets = {
+                fast: { between_listings: 3, between_profiles: 5, after_publish: 3, page_load: 3, element_wait: 1, group_selection: 0.5 },
+                balanced: { between_listings: 5, between_profiles: 10, after_publish: 5, page_load: 4, element_wait: 2, group_selection: 1 },
+                safe: { between_listings: 10, between_profiles: 20, after_publish: 8, page_load: 6, element_wait: 3, group_selection: 2 }
+            };
+            
+            if (presets[preset]) {
+                this.botConfig.delays = { ...presets[preset] };
+                const labels = { fast: '⚡ Fast', balanced: '⚖️  Balanced', safe: '🛡️  Safe' };
+                this.showToast('info', `${labels[preset]} preset applied`);
             }
         },
         
+        // Screenshot Methods
         async loadScreenshots() {
             try {
                 const response = await axios.get('/screenshots');
                 if (response.data.status === 'success') {
                     this.screenshots = response.data.screenshots;
+                    console.log(`📸 Loaded ${this.screenshots.length} screenshots`);
                 }
             } catch (error) {
                 console.error('Error loading screenshots:', error);
@@ -234,13 +293,13 @@
         
         async clearScreenshots() {
             const confirmed = await this.showDialog('confirm', 'Clear Screenshots', 
-                `Delete all ${this.screenshots.length} screenshots?`, 'Delete All');
+                `Delete all ${this.screenshots.length} screenshots? This cannot be undone.`, 'Delete All');
             if (!confirmed) return;
             
             try {
                 const response = await axios.post('/screenshots/clear');
                 if (response.data.status === 'success') {
-                    this.showToast('success', response.data.message);
+                    this.showToast('success', `Deleted ${this.screenshots.length} screenshots`);
                     this.screenshots = [];
                 }
             } catch (error) {
@@ -250,20 +309,118 @@
         },
         
         async resetBotState() {
+            const confirmed = await this.showDialog('confirm', 'Reset Bot State', 
+                'Reset all bot state files? Use this if the bot appears stuck.', 'Reset');
+            if (!confirmed) return;
+            
             try {
                 const response = await axios.post('/reset_bot_state');
                 if (response.data.status === 'success') {
-                    this.showToast('success', 'Bot state reset');
+                    this.showToast('success', 'Bot state reset successfully');
+                    
+                    // Reset all bot-related data
                     this.botStatus = {
                         status: 'idle',
                         message: '',
                         progress: 0,
-                        process_running: false
+                        process_running: false,
+                        current_profile: '',
+                        current_listing: '',
+                        current_profile_idx: 0,
+                        current_listing_idx: 0,
+                        total_profiles: 0,
+                        total_listings: 0,
+                        results: { success: 0, failed: 0, skipped: 0 }
                     };
                     this.isRunning = false;
                     this.stoppingBot = false;
+                    this.logs = '';
+                    this.lastBotMessage = '';
+                    
+                    console.log('🔄 Bot state fully reset');
                 }
             } catch (error) {
                 console.error('Error resetting bot state:', error);
+                this.showToast('error', 'Failed to reset bot state');
+            }
+        },
+        
+        // Bot Activities Helper Methods
+        getBotStatusColor(status) {
+            const colors = {
+                idle: '#48bb78',
+                starting: '#667eea',
+                running: '#f59e0b',
+                processing: '#f59e0b',
+                completed: '#48bb78',
+                stopped: '#718096',
+                error: '#f56565'
+            };
+            return colors[status] || '#718096';
+        },
+        
+        getBotStatusText(status) {
+            const texts = {
+                idle: 'Idle',
+                starting: 'Starting...',
+                running: 'Running',
+                processing: 'Processing',
+                completed: 'Completed',
+                stopped: 'Stopped',
+                error: 'Error'
+            };
+            return texts[status] || status || 'Idle';
+        },
+        
+        getListingById(id) {
+            return this.listings.find(l => l.id === id);
+        },
+        
+        clearLogs() {
+            this.logs = '';
+            this.lastBotMessage = '';
+            this.showToast('info', 'Logs cleared');
+        },
+        
+        copyLogs() {
+            if (this.logs) {
+                navigator.clipboard.writeText(this.logs).then(() => {
+                    this.showToast('success', 'Logs copied to clipboard');
+                }).catch(() => {
+                    this.showToast('error', 'Failed to copy logs');
+                });
+            } else {
+                this.showToast('info', 'No logs to copy');
+            }
+        },
+        
+        async loadBotActivityHistory() {
+            try {
+                const response = await axios.get('/upload_history', { 
+                    params: { page: 1, page_size: 20 } 
+                });
+                
+                if (response.data.uploads) {
+                    this.botActivityHistory = response.data.uploads.map(upload => ({
+                        id: upload.id,
+                        timestamp: upload.upload_datetime,
+                        profile_name: upload.profile_name,
+                        vehicle_info: upload.vehicle_info ? 
+                            `${upload.vehicle_info.year} ${upload.vehicle_info.make} ${upload.vehicle_info.model}` : 
+                            'Unknown',
+                        action: 'Post',
+                        status: upload.status,
+                        duration: upload.duration || null
+                    }));
+                    
+                    // Update stats
+                    this.botActivityStats.total_runs = response.data.total || 0;
+                    this.botActivityStats.successful = response.data.stats?.success || 0;
+                    this.botActivityStats.failed = response.data.stats?.failed || 0;
+                    
+                    console.log('📊 Bot activity history loaded:', this.botActivityHistory.length, 'records');
+                }
+            } catch (error) {
+                console.error('Error loading bot activity history:', error);
             }
         },
