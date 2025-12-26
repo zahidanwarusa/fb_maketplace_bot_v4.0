@@ -144,10 +144,10 @@ if __name__ == '__main__':
     try:
         if test_supabase_connection():
             print("🚀 Starting Flask application...")
-            print("🌐 Open http://localhost:5000 in your browser")
+            print("🌐 Open http://localhost:5001 in your browser")
             print(f"⚙️  Maximum listing selection: {MAX_LISTING_SELECTION}")
             print("\n")
-            app.run(debug=True, host='0.0.0.0', port=5000)
+            app.run(debug=True, host='0.0.0.0', port=5001)
         else:
             print("⚠️  Application cannot start without Supabase connection.")
     except Exception as e:
