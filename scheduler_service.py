@@ -150,7 +150,7 @@ def execute_scheduled_post(post):
         )
 
         # Wait for bot to complete
-        stdout, stderr = bot_process.communicate(timeout=600)  # 10 minute timeout
+        stdout, stderr = bot_process.communicate(timeout=1800)  # 30 minute timeout
 
         if bot_process.returncode == 0:
             logger.info(f"Scheduled post {post['id']} completed successfully")

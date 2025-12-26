@@ -116,6 +116,100 @@ def init_schedule_routes(app, supabase):
             logger.error(f"Error scheduling post: {str(e)}")
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
+    @app.route('/schedule_posts_bulk', methods=['POST'])
+    def schedule_posts_bulk():
+        try:
+            data = request.json
+            if not data:
+                return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+
+            listing_ids = data.get('listing_ids', [])
+            profile_ids = data.get('profile_ids', [])
+            scheduled_datetime_str = data.get('scheduled_datetime')
+            recurrence = data.get('recurrence', 'none')
+
+            if not listing_ids or not profile_ids:
+                return jsonify({'status': 'error', 'message': 'listing_ids and profile_ids are required'}), 400
+
+            if not scheduled_datetime_str:
+                return jsonify({'status': 'error', 'message': 'scheduled_datetime is required'}), 400
+
+            # Parse the datetime string as local time (no timezone conversion)
+            if 'T' in scheduled_datetime_str:
+                scheduled_datetime_str = scheduled_datetime_str.replace('T', ' ')
+            if 'Z' in scheduled_datetime_str:
+                scheduled_datetime_str = scheduled_datetime_str.replace('Z', '')
+
+            # Parse as naive datetime (local time, no timezone)
+            try:
+                scheduled_dt = datetime.strptime(scheduled_datetime_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                scheduled_dt = datetime.strptime(scheduled_datetime_str.split('.')[0], '%Y-%m-%d %H:%M')
+
+            # Get profile details for all selected profiles
+            profile_details = {}
+            for profile_id in profile_ids:
+                try:
+                    prof_response = supabase.table('edge_profiles').select('*').eq('id', int(profile_id)).single().execute()
+                    if prof_response.data:
+                        profile_details[profile_id] = prof_response.data
+                except:
+                    pass
+
+            # Generate a unique batch_id for this group of scheduled posts
+            batch_id = f"batch_{int(datetime.now().timestamp() * 1000)}"
+
+            # Create individual scheduled posts for each listing-profile combination
+            # First profile starts at scheduled time, subsequent profiles get delayed
+            created_count = 0
+            profile_index = 0
+
+            for listing_id in listing_ids:
+                for profile_id in profile_ids:
+                    profile = profile_details.get(profile_id)
+                    if not profile:
+                        continue
+
+                    # Calculate execution time: first profile at scheduled time,
+                    # subsequent profiles delayed by 15 minutes each
+                    execution_time = scheduled_dt + timedelta(minutes=15 * profile_index)
+
+                    schedule_record = {
+                        'listing_id': int(listing_id),
+                        'profile_id': int(profile_id),
+                        'profile_name': str(profile.get('profile_name', ''))[:100],
+                        'profile_path': str(profile.get('profile_path', ''))[:500],
+                        'profile_folder': str(profile.get('profile_path', ''))[:500],
+                        'location': str(profile.get('location', ''))[:200],
+                        'scheduled_datetime': scheduled_dt.isoformat(),
+                        'next_run_datetime': execution_time.isoformat(),
+                        'status': 'pending',
+                        'recurrence': recurrence,
+                        'batch_id': batch_id,
+                        'created_at': datetime.now().isoformat()
+                    }
+
+                    try:
+                        supabase.table('scheduled_posts').insert(schedule_record).execute()
+                        created_count += 1
+                        profile_index += 1
+                    except Exception as e:
+                        logger.error(f"Error creating schedule for listing {listing_id}, profile {profile_id}: {str(e)}")
+
+            if created_count > 0:
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Created {created_count} scheduled posts',
+                    'count': created_count,
+                    'batch_id': batch_id
+                })
+            else:
+                return jsonify({'status': 'error', 'message': 'Failed to create any schedules'}), 500
+
+        except Exception as e:
+            logger.error(f"Error scheduling posts in bulk: {str(e)}")
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+
     @app.route('/update_scheduled_post', methods=['POST'])
     def update_scheduled_post():
         try:

@@ -34,12 +34,59 @@
             <div class="card-title"><i :class="editingSchedule ? 'fas fa-edit' : 'fas fa-calendar-plus'" style="color: #667eea; margin-right: 8px;"></i>[[ editingSchedule ? 'Edit Scheduled Post' : 'Schedule New Post' ]]</div>
             <button v-if="editingSchedule" @click="cancelEditSchedule" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</button>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-            <div><label>Select Listing</label><select v-model="scheduleForm.listing_id" required><option value="">Choose a listing...</option><option v-for="listing in listings" :key="listing.id" :value="listing.id">[[ listing.Year ]] [[ listing.Make ]] [[ listing.Model ]]</option></select></div>
-            <div><label>Select Edge Profile</label><select v-model="scheduleForm.profile_id" @change="onScheduleProfileChange" required><option value="">Choose a profile...</option><option v-for="profile in profiles" :key="profile.id" :value="profile.id" :disabled="!profile.is_active">[[ profile.profile_name ]]</option></select></div>
-            <div><label>Schedule Date & Time</label><input type="datetime-local" v-model="scheduleForm.datetime" required></div>
-            <div><label>Recurrence</label><select v-model="scheduleForm.recurrence"><option value="none">One Time</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
-            <div style="display: flex; align-items: flex-end;"><button @click="saveScheduledPost" class="btn btn-primary" style="width: 100%;"><i :class="editingSchedule ? 'fas fa-save' : 'fas fa-calendar-plus'"></i> [[ editingSchedule ? 'Update' : 'Schedule Post' ]]</button></div>
+        <div style="display: grid; grid-template-columns: 1fr; gap: 16px;">
+            <div>
+                <label>Select Listings (Ctrl+Click for multiple)</label>
+                <select v-model="scheduleForm.listing_ids" multiple required style="min-height: 120px;">
+                    <option v-for="listing in listings" :key="listing.id" :value="listing.id">
+                        [[ listing.Year ]] [[ listing.Make ]] [[ listing.Model ]]
+                    </option>
+                </select>
+                <div style="font-size: 12px; color: #718096; margin-top: 4px;">
+                    [[ scheduleForm.listing_ids.length ]] listing(s) selected
+                </div>
+            </div>
+            <div>
+                <label>Select Edge Profiles (Ctrl+Click for multiple)</label>
+                <select v-model="scheduleForm.profile_ids" multiple required style="min-height: 120px;">
+                    <option v-for="profile in activeProfiles" :key="profile.id" :value="profile.id">
+                        [[ profile.profile_name ]] - [[ profile.location ]]
+                    </option>
+                </select>
+                <div style="font-size: 12px; color: #718096; margin-top: 4px;">
+                    [[ scheduleForm.profile_ids.length ]] profile(s) selected
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div>
+                    <label>Schedule Date & Time</label>
+                    <input type="datetime-local" v-model="scheduleForm.datetime" required>
+                </div>
+                <div>
+                    <label>Recurrence</label>
+                    <select v-model="scheduleForm.recurrence">
+                        <option value="none">One Time</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+            </div>
+            <div style="padding: 12px; background: #f7fafc; border-radius: 8px; border-left: 4px solid #667eea;">
+                <div style="font-weight: 600; margin-bottom: 4px;">Total Combinations:</div>
+                <div style="font-size: 24px; color: #667eea; font-weight: 700;">
+                    [[ scheduleForm.listing_ids.length * scheduleForm.profile_ids.length ]]
+                </div>
+                <div style="font-size: 12px; color: #718096; margin-top: 4px;">
+                    [[ scheduleForm.listing_ids.length ]] listing(s) × [[ scheduleForm.profile_ids.length ]] profile(s)
+                </div>
+            </div>
+            <div style="display: flex; align-items: flex-end;">
+                <button @click="saveScheduledPost" class="btn btn-primary" style="width: 100%;">
+                    <i :class="editingSchedule ? 'fas fa-save' : 'fas fa-calendar-plus'"></i>
+                    [[ editingSchedule ? 'Update' : 'Schedule Posts' ]]
+                </button>
+            </div>
         </div>
     </div>
     <div class="card">
@@ -48,22 +95,38 @@
         <div v-else-if="scheduledPosts.length === 0" class="empty-state"><i class="fas fa-calendar-times"></i><h3>No scheduled posts</h3></div>
         <div v-else class="table-container">
             <table>
-                <thead><tr><th>Scheduled For</th><th>Profile</th><th>Vehicle</th><th>Recurrence</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Batch</th><th>Execution Time</th><th>Profile</th><th>Vehicle</th><th>Recurrence</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
-                    <tr v-for="post in scheduledPosts" :key="post.id">
-                        <td><div style="font-weight: 600;">[[ formatDate(post.scheduled_datetime) ]]</div><div style="color: #718096; font-size: 13px;">[[ formatTime(post.scheduled_datetime) ]]</div></td>
-                        <td><div style="font-weight: 600;">[[ post.profile_name ]]</div></td>
-                        <td><div style="font-weight: 600;">[[ post.vehicle_info.year ]] [[ post.vehicle_info.make ]] [[ post.vehicle_info.model ]]</div></td>
-                        <td><span class="badge badge-info" style="text-transform: capitalize;">[[ post.recurrence ]]</span></td>
-                        <td><span :class="'badge badge-' + getStatusType(post.status)">[[ post.status ]]</span></td>
-                        <td>
-                            <div style="display: flex; gap: 8px;">
-                                <button v-if="post.status === 'pending'" @click="editScheduledPost(post)" class="btn btn-primary" style="padding: 8px 12px;"><i class="fas fa-edit"></i></button>
-                                <button v-if="post.status === 'pending'" @click="cancelScheduledPost(post.id)" class="btn btn-secondary" style="padding: 8px 12px;"><i class="fas fa-ban"></i></button>
-                                <button @click="deleteScheduledPost(post.id)" class="btn btn-danger" style="padding: 8px 12px;"><i class="fas fa-trash"></i></button>
-                            </div>
-                        </td>
-                    </tr>
+                    <template v-for="post in scheduledPosts">
+                        <tr :key="post.id" :style="post.batch_id ? 'border-left: 4px solid #667eea;' : ''">
+                            <td>
+                                <div v-if="post.batch_id" style="font-size: 11px; color: #667eea; font-weight: 600;">
+                                    [[ post.batch_id.split('_')[1].substring(0, 6) ]]
+                                </div>
+                                <div v-else style="font-size: 11px; color: #a0aec0;">
+                                    Single
+                                </div>
+                            </td>
+                            <td>
+                                <div style="font-weight: 600;">[[ formatDate(post.next_run_datetime) ]]</div>
+                                <div style="color: #718096; font-size: 13px;">[[ formatTime(post.next_run_datetime) ]]</div>
+                                <div v-if="post.next_run_datetime !== post.scheduled_datetime" style="font-size: 11px; color: #ed8936; margin-top: 2px;">
+                                    (Delayed from [[ formatTime(post.scheduled_datetime) ]])
+                                </div>
+                            </td>
+                            <td><div style="font-weight: 600;">[[ post.profile_name ]]</div></td>
+                            <td><div style="font-weight: 600;">[[ post.vehicle_info.year ]] [[ post.vehicle_info.make ]] [[ post.vehicle_info.model ]]</div></td>
+                            <td><span class="badge badge-info" style="text-transform: capitalize;">[[ post.recurrence ]]</span></td>
+                            <td><span :class="'badge badge-' + getStatusType(post.status)">[[ post.status ]]</span></td>
+                            <td>
+                                <div style="display: flex; gap: 8px;">
+                                    <button v-if="post.status === 'pending'" @click="editScheduledPost(post)" class="btn btn-primary" style="padding: 8px 12px;"><i class="fas fa-edit"></i></button>
+                                    <button v-if="post.status === 'pending'" @click="cancelScheduledPost(post.id)" class="btn btn-secondary" style="padding: 8px 12px;"><i class="fas fa-ban"></i></button>
+                                    <button @click="deleteScheduledPost(post.id)" class="btn btn-danger" style="padding: 8px 12px;"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
                 </tbody>
             </table>
         </div>
