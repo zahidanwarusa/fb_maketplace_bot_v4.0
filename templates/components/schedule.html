@@ -7,13 +7,39 @@
         <div class="stat-card"><div style="color: #718096; font-size: 14px;">Total</div><div style="font-size: 32px; font-weight: 700; color: #1a202c;">[[ scheduleStats.total ]]</div></div>
     </div>
     <div class="card" style="margin-bottom: 24px;">
-        <div class="card-header"><div class="card-title"><i class="fas fa-calendar-plus" style="color: #667eea; margin-right: 8px;"></i>Schedule New Post</div></div>
+        <div class="card-header">
+            <div class="card-title"><i class="fas fa-robot" style="color: #667eea; margin-right: 8px;"></i>Scheduler Service</div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <div v-if="schedulerStatus.scheduler_running" style="display: flex; align-items: center; gap: 8px;">
+                    <div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>
+                    <span style="color: #48bb78; font-weight: 600;">Running</span>
+                </div>
+                <div v-else style="color: #718096;">Stopped</div>
+                <button v-if="!schedulerStatus.scheduler_running" @click="startScheduler" class="btn btn-success"><i class="fas fa-play"></i> Start Scheduler</button>
+                <button v-else @click="stopScheduler" class="btn btn-danger"><i class="fas fa-stop"></i> Stop Scheduler</button>
+                <button @click="loadSchedulerStatus" class="btn btn-secondary"><i class="fas fa-sync-alt"></i></button>
+            </div>
+        </div>
+        <div v-if="schedulerStatus.next_post" style="padding: 16px; background: #f7fafc; border-radius: 8px;">
+            <div style="font-size: 14px; color: #718096; margin-bottom: 8px;">Next Scheduled Post:</div>
+            <div style="font-weight: 600;">[[ formatDate(schedulerStatus.next_post.next_run_datetime) ]] at [[ formatTime(schedulerStatus.next_post.next_run_datetime) ]]</div>
+            <div style="color: #718096; font-size: 14px; margin-top: 4px;">Profile: [[ schedulerStatus.next_post.profile_name ]]</div>
+        </div>
+        <div v-else-if="schedulerStatus.pending_count === 0" style="padding: 16px; background: #f7fafc; border-radius: 8px; text-align: center; color: #718096;">
+            No pending scheduled posts
+        </div>
+    </div>
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <div class="card-title"><i :class="editingSchedule ? 'fas fa-edit' : 'fas fa-calendar-plus'" style="color: #667eea; margin-right: 8px;"></i>[[ editingSchedule ? 'Edit Scheduled Post' : 'Schedule New Post' ]]</div>
+            <button v-if="editingSchedule" @click="cancelEditSchedule" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</button>
+        </div>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
             <div><label>Select Listing</label><select v-model="scheduleForm.listing_id" required><option value="">Choose a listing...</option><option v-for="listing in listings" :key="listing.id" :value="listing.id">[[ listing.Year ]] [[ listing.Make ]] [[ listing.Model ]]</option></select></div>
             <div><label>Select Edge Profile</label><select v-model="scheduleForm.profile_id" @change="onScheduleProfileChange" required><option value="">Choose a profile...</option><option v-for="profile in profiles" :key="profile.id" :value="profile.id" :disabled="!profile.is_active">[[ profile.profile_name ]]</option></select></div>
             <div><label>Schedule Date & Time</label><input type="datetime-local" v-model="scheduleForm.datetime" required></div>
             <div><label>Recurrence</label><select v-model="scheduleForm.recurrence"><option value="none">One Time</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
-            <div style="display: flex; align-items: flex-end;"><button @click="scheduleNewPost" class="btn btn-primary" style="width: 100%;"><i class="fas fa-calendar-plus"></i> Schedule Post</button></div>
+            <div style="display: flex; align-items: flex-end;"><button @click="saveScheduledPost" class="btn btn-primary" style="width: 100%;"><i :class="editingSchedule ? 'fas fa-save' : 'fas fa-calendar-plus'"></i> [[ editingSchedule ? 'Update' : 'Schedule Post' ]]</button></div>
         </div>
     </div>
     <div class="card">
@@ -32,6 +58,7 @@
                         <td><span :class="'badge badge-' + getStatusType(post.status)">[[ post.status ]]</span></td>
                         <td>
                             <div style="display: flex; gap: 8px;">
+                                <button v-if="post.status === 'pending'" @click="editScheduledPost(post)" class="btn btn-primary" style="padding: 8px 12px;"><i class="fas fa-edit"></i></button>
                                 <button v-if="post.status === 'pending'" @click="cancelScheduledPost(post.id)" class="btn btn-secondary" style="padding: 8px 12px;"><i class="fas fa-ban"></i></button>
                                 <button @click="deleteScheduledPost(post.id)" class="btn btn-danger" style="padding: 8px 12px;"><i class="fas fa-trash"></i></button>
                             </div>

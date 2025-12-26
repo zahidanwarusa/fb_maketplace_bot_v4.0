@@ -36,6 +36,12 @@ new Vue({
             recurrence: 'none'
         },
         selectedScheduleProfile: null,
+        editingSchedule: null,
+        schedulerStatus: {
+            scheduler_running: false,
+            pending_count: 0,
+            next_post: null
+        },
         selectedUpload: null,
         currentPage: 1,
         pageSize: 20,
